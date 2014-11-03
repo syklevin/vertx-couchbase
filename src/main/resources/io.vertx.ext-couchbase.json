@@ -1,0 +1,11 @@
+{
+  "main": "io.vertx.ext.couchbase.CouchbaseServiceVerticle",
+  "options": {
+    "worker": false,
+    "config": {
+      "address": "vertx.couchbase",
+      "connection_string": "mongodb://localhost:27017",
+      "db_name": "default_db"
+    }
+  }
+}
