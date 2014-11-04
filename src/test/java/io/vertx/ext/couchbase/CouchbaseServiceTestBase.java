@@ -17,16 +17,6 @@ public class CouchbaseServiceTestBase extends VertxTestBase {
 
     protected CouchbaseService cbService;
 
-    protected JsonObject getConfig() {
-        JsonObject couchbaseCfg = new JsonObject()
-                .putString("bucket", "beer-sample")
-                .putString("password", "");
-        JsonArray nodes = new JsonArray();
-        nodes.add("192.168.0.87");
-        couchbaseCfg.putArray("nodes", nodes);
-        return couchbaseCfg;
-    }
-
     @Override
     public void setUp() throws Exception {
         super.setUp();
@@ -39,6 +29,47 @@ public class CouchbaseServiceTestBase extends VertxTestBase {
     public void tearDown() throws Exception {
         cbService.stop();
         super.tearDown();
+    }
+
+
+    protected JsonObject getConfig() {
+        JsonObject couchbaseCfg = new JsonObject()
+                .putString("bucket", "default")
+                .putString("password", "");
+        JsonArray nodes = new JsonArray();
+        nodes.add("192.168.0.36");
+        couchbaseCfg.putArray("nodes", nodes);
+        return couchbaseCfg;
+    }
+
+    @Test
+    public void testCreateAndGetCollection() throws Exception {
+
+        JsonObject command = new JsonObject();
+        command.putString("doctype", "user");
+        command.putString("id", UUID.randomUUID().toString());
+
+        JsonObject content = new JsonObject();
+
+        content.putString("username", "peter");
+        content.putString("password", "123456");
+        content.putString("email", "peter@abc.com");
+        command.putObject("content", content);
+
+        cbService.insert(command, (result) -> {
+            JsonObject jsonData = result.result();
+            if("ok".equals(jsonData.getString("status"))){
+                JsonObject dbUser = jsonData.getObject("result");
+                assertEquals(dbUser.getString("username"), "peter");
+
+                testComplete();
+            }
+            else{
+                fail(jsonData.getString("status"));
+            }
+        });
+
+        await();
     }
 
 

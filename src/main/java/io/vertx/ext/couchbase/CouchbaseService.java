@@ -28,6 +28,8 @@ public interface CouchbaseService {
         return ProxyHelper.createProxy(CouchbaseService.class, vertx, address);
     }
 
+    void findOne(JsonObject command, Handler<AsyncResult<JsonObject>> resultHandler);
+
     void insert(JsonObject command, Handler<AsyncResult<JsonObject>> resultHandler);
 
     void delete(JsonObject command, Handler<AsyncResult<JsonObject>> resultHandler);

@@ -14,6 +14,7 @@ import io.vertx.core.*;
 import io.vertx.core.json.JsonArray;
 import io.vertx.core.json.JsonObject;
 import io.vertx.ext.couchbase.CouchbaseService;
+import io.vertx.ext.rx.java.RxHelper;
 import rx.Observable;
 import rx.functions.Action0;
 import rx.functions.Action1;
@@ -47,13 +48,16 @@ public class CouchbaseServiceImpl implements CouchbaseService {
 
         address = config.getString("address", DEFAULT_ADDRESS);
         String bucketPwd = config.getString("password", "");
-        String bucketName = config.getString("bucket", "defaults");
-        JsonArray nodesJsonArr = config.getArray("nodes", new JsonArray().addString("localhost"));
-        List<String> couchNodes = nodesJsonArr.toList();
-        CouchbaseEnvironment env = DefaultCouchbaseEnvironment.builder()
-//                .queryEnabled(true)
-                .build();
-        couchbase = CouchbaseCluster.create(couchNodes);
+        String bucketName = config.getString("bucket", "default");
+//        JsonArray nodesJsonArr = config.getArray("nodes", new JsonArray().addString("localhost"));
+//        List<String> couchNodes = nodesJsonArr.toList();
+//        CouchbaseEnvironment env = DefaultCouchbaseEnvironment.builder()
+////                .queryEnabled(true)
+//                .build();
+//        couchbase = CouchbaseCluster.create(couchNodes);
+
+        couchbase = CouchbaseCluster.create("127.0.0.1");
+
         List<Transcoder<? extends Document, ?>> customTranscoders = new ArrayList<>();
         customTranscoders.add(new VertxJsonTranscoder());
         bucket = couchbase.openBucket(bucketName, bucketPwd, customTranscoders);
@@ -64,6 +68,11 @@ public class CouchbaseServiceImpl implements CouchbaseService {
         if(couchbase != null){
             couchbase.disconnect();
         }
+    }
+
+    @Override
+    public void findOne(JsonObject command, Handler<AsyncResult<JsonObject>> resultHandler) {
+
     }
 
     public void insert(JsonObject command, Handler<AsyncResult<JsonObject>> asyncHandler){
@@ -91,24 +100,32 @@ public class CouchbaseServiceImpl implements CouchbaseService {
         o.flatMap((d) -> bucket.async().get(docId, VertxJsonDocument.class))
           .single()
           .subscribe((vertxJsonDocument) -> {
-              JsonObject rootNode = new JsonObject();
-              if (vertxJsonDocument == null) {
-                  rootNode.putString("status", "error");
-              }
-              else{
-                  rootNode.putString("status", "ok");
-                  rootNode.putString("id", vertxJsonDocument.id());
-                  rootNode.putNumber("cas", vertxJsonDocument.cas());
-                  rootNode.putObject("result", vertxJsonDocument.content());
-              }
-              asyncHandler.handle(Future.completedFuture(rootNode));
-          },
-          (t) -> {
-              JsonObject rootNode = new JsonObject();
-              rootNode.putString("status", "error");
-              rootNode.putString("reason", t.getMessage());
-              asyncHandler.handle(Future.completedFuture(rootNode));
-          });
+                      JsonObject rootNode = new JsonObject();
+                      if (vertxJsonDocument == null) {
+                          rootNode.putString("status", "error");
+                      } else {
+                          rootNode.putString("status", "ok");
+                          rootNode.putString("id", vertxJsonDocument.id());
+                          rootNode.putNumber("cas", vertxJsonDocument.cas());
+                          rootNode.putObject("result", vertxJsonDocument.content());
+                      }
+
+                      vertx.context().runOnContext(ignored -> {
+                          asyncHandler.handle(Future.completedFuture(rootNode));
+                      });
+
+                  },
+                  (t) -> {
+                      JsonObject rootNode = new JsonObject();
+                      rootNode.putString("status", "error");
+                      rootNode.putString("reason", t.getMessage());
+
+                      vertx.context().runOnContext(ignored -> {
+                          asyncHandler.handle(Future.completedFuture(rootNode));
+                      });
+
+
+                  });
     }
 
     public void delete(JsonObject command, Handler<AsyncResult<JsonObject>> asyncHandler){
@@ -134,7 +151,10 @@ public class CouchbaseServiceImpl implements CouchbaseService {
                             rootNode.putNumber("cas", vertxJsonDocument.cas());
                             rootNode.putObject("result", vertxJsonDocument.content());
                         }
-                        asyncHandler.handle(Future.completedFuture(rootNode));
+
+                        vertx.context().runOnContext(ignored -> {
+                            asyncHandler.handle(Future.completedFuture(rootNode));
+                        });
                     }
                 }, new Action1<Throwable>() {
                     @Override
@@ -142,7 +162,10 @@ public class CouchbaseServiceImpl implements CouchbaseService {
                         JsonObject rootNode = new JsonObject();
                         rootNode.putString("status", "error");
                         rootNode.putString("reason", throwable.getMessage());
-                        asyncHandler.handle(Future.completedFuture(rootNode));
+
+                        vertx.context().runOnContext(ignored -> {
+                            asyncHandler.handle(Future.completedFuture(rootNode));
+                        });
                     }
                 });
     }
@@ -235,7 +258,10 @@ public class CouchbaseServiceImpl implements CouchbaseService {
                     JsonObject rootNode = new JsonObject();
                     rootNode.putString("status", "error");
                     rootNode.putString("reason", throwable.getMessage());
-                    asyncHandler.handle(Future.completedFuture(rootNode));
+
+                    vertx.context().runOnContext(ignored -> {
+                        asyncHandler.handle(Future.completedFuture(rootNode));
+                    });
 
                 }
             }, new Action0() {
@@ -245,7 +271,9 @@ public class CouchbaseServiceImpl implements CouchbaseService {
                     rootNode.putString("status", "ok");
                     rootNode.putArray("result", results);
 
-                    asyncHandler.handle(Future.completedFuture(rootNode));
+                    vertx.context().runOnContext(ignored -> {
+                        asyncHandler.handle(Future.completedFuture(rootNode));
+                    });
                 }
             });
 
@@ -255,12 +283,14 @@ public class CouchbaseServiceImpl implements CouchbaseService {
 
     public void dbInfo(JsonObject command, Handler<AsyncResult<JsonObject>> asyncHandler){
 
-        bucket.async().bucketManager().flatMap(new Func1<AsyncBucketManager, Observable<BucketInfo>>() {
-            @Override
-            public Observable<BucketInfo> call(AsyncBucketManager asyncBucketManager) {
-                return asyncBucketManager.info();
-            }
-        }).subscribe(new Action1<BucketInfo>() {
+        bucket.async().bucketManager()
+            .flatMap(new Func1<AsyncBucketManager, Observable<BucketInfo>>() {
+                @Override
+                public Observable<BucketInfo> call(AsyncBucketManager asyncBucketManager) {
+                    return asyncBucketManager.info();
+                }
+            })
+            .subscribe(new Action1<BucketInfo>() {
             @Override
             public void call(BucketInfo bucketInfo) {
                 JsonObject rootNode = new JsonObject();
@@ -274,7 +304,9 @@ public class CouchbaseServiceImpl implements CouchbaseService {
                     rootNode.putNumber("nodeCount", bucketInfo.nodeCount());
                     rootNode.putNumber("replicaCount", bucketInfo.replicaCount());
                 }
-                asyncHandler.handle(Future.completedFuture(rootNode));
+                vertx.context().runOnContext(ignored -> {
+                    asyncHandler.handle(Future.completedFuture(rootNode));
+                });
             }
         }, new Action1<Throwable>() {
             @Override
@@ -282,7 +314,9 @@ public class CouchbaseServiceImpl implements CouchbaseService {
                 JsonObject rootNode = new JsonObject();
                 rootNode.putString("status", "error");
                 rootNode.putString("reason", throwable.getMessage());
-                asyncHandler.handle(Future.completedFuture(rootNode));
+                vertx.context().runOnContext(ignored -> {
+                    asyncHandler.handle(Future.completedFuture(rootNode));
+                });
             }
         });
     }
