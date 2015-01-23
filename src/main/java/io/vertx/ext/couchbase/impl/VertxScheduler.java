@@ -13,11 +13,11 @@ import java.util.concurrent.TimeUnit;
 /**
  * Created by levin on 11/4/2014.
  */
-public class ContextScheduler extends Scheduler {
+public class VertxScheduler extends Scheduler {
 
     private final Vertx vertx;
 
-    public ContextScheduler(Vertx vertx) {
+    public VertxScheduler(Vertx vertx) {
         this.vertx = vertx;
     }
 
@@ -51,7 +51,7 @@ public class ContextScheduler extends Scheduler {
 
         @Override
         public Subscription schedule(final Action0 action) {
-            vertx.context().runOnContext(event -> {
+            vertx.runOnContext(event -> {
                 if (innerSubscription.isUnsubscribed())
                     return;
                 action.call();

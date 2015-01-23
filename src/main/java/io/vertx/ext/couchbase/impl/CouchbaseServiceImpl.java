@@ -1,183 +1,210 @@
 package io.vertx.ext.couchbase.impl;
 
-import com.couchbase.client.java.Bucket;
-import com.couchbase.client.java.Cluster;
-import com.couchbase.client.java.CouchbaseCluster;
-import com.couchbase.client.java.bucket.AsyncBucketManager;
-import com.couchbase.client.java.bucket.BucketInfo;
+import com.couchbase.client.java.*;
 import com.couchbase.client.java.document.Document;
+import com.couchbase.client.java.document.JsonDocument;
 import com.couchbase.client.java.env.CouchbaseEnvironment;
 import com.couchbase.client.java.env.DefaultCouchbaseEnvironment;
+import com.couchbase.client.java.query.*;
 import com.couchbase.client.java.transcoder.Transcoder;
 import com.couchbase.client.java.view.*;
+import static com.couchbase.client.java.query.Select.*;
+import static com.couchbase.client.java.query.dsl.Expression.*;
 import io.vertx.core.*;
 import io.vertx.core.json.JsonArray;
 import io.vertx.core.json.JsonObject;
+import io.vertx.core.logging.Logger;
+import io.vertx.core.logging.impl.LoggerFactory;
 import io.vertx.ext.couchbase.CouchbaseService;
-import io.vertx.ext.rx.java.RxHelper;
 import rx.Observable;
-import rx.functions.Action0;
-import rx.functions.Action1;
-import rx.functions.Func1;
 
+import javax.naming.OperationNotSupportedException;
 import java.util.ArrayList;
 import java.util.List;
-import java.util.function.Function;
 
 /**
  * Created by levin on 10/27/2014.
  */
 public class CouchbaseServiceImpl implements CouchbaseService {
 
+    public static final Logger logger = LoggerFactory.getLogger(CouchbaseServiceImpl.class);
     public static final String DEFAULT_ADDRESS = "vertx.couchbase";
-
     private final Vertx vertx;
     private final JsonObject config;
+    private final VertxScheduler vertxScheduler;
 
     private String address;
-    private Cluster couchbase;
-    private Bucket bucket;
+    private String bucketName;
+    private CouchbaseEnvironment env;
+    private AsyncCluster couchbase;
+    private AsyncBucket bucket;
+    private List<Transcoder<? extends Document, ?>> customTranscoders;
+    private Boolean queryEnabled;
 
     public CouchbaseServiceImpl(Vertx vertx, JsonObject config) {
         this.vertx = vertx;
         this.config = config;
+        this.vertxScheduler = new VertxScheduler(vertx);
+        //this.customTranscoders = new ArrayList<>();
+        //this.customTranscoders.add(new VertxJsonTranscoder());
     }
 
     @Override
-    public void start() {
-
+    public void start(Handler<AsyncResult<Void>> asyncHandler) {
         address = config.getString("address", DEFAULT_ADDRESS);
+        queryEnabled = config.getBoolean("queryEnabled", true);
         String bucketPwd = config.getString("password", "");
-        String bucketName = config.getString("bucket", "default");
-//        JsonArray nodesJsonArr = config.getArray("nodes", new JsonArray().addString("localhost"));
-//        List<String> couchNodes = nodesJsonArr.toList();
-//        CouchbaseEnvironment env = DefaultCouchbaseEnvironment.builder()
-////                .queryEnabled(true)
-//                .build();
-//        couchbase = CouchbaseCluster.create(couchNodes);
+        bucketName = config.getString("bucket", "default");
+        JsonArray nodesJsonArr = config.getJsonArray("nodes", new JsonArray());
+        env = DefaultCouchbaseEnvironment.builder()
+                .queryEnabled(queryEnabled)
+                .build();
+        couchbase = CouchbaseAsyncCluster.create(env, nodesJsonArr.getList());
+        couchbase.openBucket(bucketName, bucketPwd)
+                .subscribe(asyncBucket -> {
+                    bucket = asyncBucket;
 
-        couchbase = CouchbaseCluster.create("127.0.0.1");
+                    if(queryEnabled){
 
-        List<Transcoder<? extends Document, ?>> customTranscoders = new ArrayList<>();
-        customTranscoders.add(new VertxJsonTranscoder());
-        bucket = couchbase.openBucket(bucketName, bucketPwd, customTranscoders);
+                        logger.info("create n1ql index for " + bucketName);
+                        createN1qlIndex(ar -> {
+                            if(ar.succeeded()){
+                                vertx.runOnContext(v -> asyncHandler.handle(Future.succeededFuture()));
+                            }
+                            else{
+                                vertx.runOnContext(v -> asyncHandler.handle(Future.failedFuture(ar.cause())));
+                            }
+                        });
+                    }
+                    else{
+                        vertx.runOnContext(v -> asyncHandler.handle(Future.succeededFuture()));
+                    }
+
+                }, e -> vertx.runOnContext(v -> asyncHandler.handle(Future.failedFuture(e))));
     }
 
     @Override
-    public void stop() {
+    public void stop(Handler<AsyncResult<Void>> asyncHandler) {
         if(couchbase != null){
-            couchbase.disconnect();
+            couchbase.disconnect()
+                    .subscribe(aBoolean -> {
+                        env.shutdown();
+                        vertx.runOnContext(v -> asyncHandler.handle(Future.succeededFuture()));
+                    }, e -> vertx.runOnContext(v -> asyncHandler.handle(Future.failedFuture(e))));
+        }
+        else{
+            asyncHandler.handle(Future.succeededFuture());
         }
     }
 
     @Override
-    public void findOne(JsonObject command, Handler<AsyncResult<JsonObject>> resultHandler) {
-
-    }
-
-    public void insert(JsonObject command, Handler<AsyncResult<JsonObject>> asyncHandler){
-
+    public void findOne(JsonObject command, Handler<AsyncResult<JsonObject>> asyncHandler) {
         String doctype = command.getString("doctype");
         String id = command.getString("id");
-        JsonObject content = command.getObject("content");
-
-        if (!content.containsField("_id")) {
-            content.putString("_id", id);
+        if(doctype == null || id == null) {
+            asyncHandler.handle(Future.failedFuture(new Exception("doctype or id could not be null")));
+            return;
         }
-        if (!content.containsField("_doctype"))
-            content.putString("_doctype", doctype);
-
-        int expired = command.getInteger("expired", 0);
-        long cas = command.getLong("cas", 0);
-        boolean upsert = command.getBoolean("upsert", true);
-
         final String docId = buildDocumentId(doctype, id);
-        final VertxJsonDocument doc = VertxJsonDocument.create(docId, expired, content, cas);
-
-        Observable<VertxJsonDocument> o = upsert ? bucket.async().upsert(doc) :
-                                                    bucket.async().insert(doc);
-
-        o.flatMap((d) -> bucket.async().get(docId, VertxJsonDocument.class))
-          .single()
-          .subscribe((vertxJsonDocument) -> {
-                      JsonObject rootNode = new JsonObject();
-                      if (vertxJsonDocument == null) {
-                          rootNode.putString("status", "error");
-                      } else {
-                          rootNode.putString("status", "ok");
-                          rootNode.putString("id", vertxJsonDocument.id());
-                          rootNode.putNumber("cas", vertxJsonDocument.cas());
-                          rootNode.putObject("result", vertxJsonDocument.content());
-                      }
-
-                      vertx.context().runOnContext(ignored -> {
-                          asyncHandler.handle(Future.completedFuture(rootNode));
-                      });
-
-                  },
-                  (t) -> {
-                      JsonObject rootNode = new JsonObject();
-                      rootNode.putString("status", "error");
-                      rootNode.putString("reason", t.getMessage());
-
-                      vertx.context().runOnContext(ignored -> {
-                          asyncHandler.handle(Future.completedFuture(rootNode));
-                      });
-
-
-                  });
+        bucket.get(docId)
+                .single()
+                .subscribe(jsonDoc -> {
+                    JsonObject rootNode = new JsonObject();
+                    rootNode.put("status", "ok");
+                    rootNode.put("id", jsonDoc.id());
+                    rootNode.put("cas", jsonDoc.cas());
+                    rootNode.put("result", new JsonObject(jsonDoc.content().toMap()));
+                    handleSuccessResult(rootNode, asyncHandler);
+                }, e -> handleFailureResult(e, asyncHandler));
     }
 
-    public void delete(JsonObject command, Handler<AsyncResult<JsonObject>> asyncHandler){
 
+    @Override
+    public void insert(JsonObject command, Handler<AsyncResult<JsonObject>> asyncHandler) {
         String doctype = command.getString("doctype");
         String id = command.getString("id");
-
+        JsonObject content = command.getJsonObject("content");
+        if (!content.containsKey("_id")) {
+            content.put("_id", id);
+        }
+        if (!content.containsKey("_doctype"))
+            content.put("_doctype", doctype);
+        int expired = command.getInteger("expired", 0);
+        long cas = command.getLong("cas", 0L);
+        boolean upsert = command.getBoolean("upsert", false);
         final String docId = buildDocumentId(doctype, id);
+        //final VertxJsonDocument doc = VertxJsonDocument.create(docId, expired, content, cas);
 
-        bucket.async().remove(docId, VertxJsonDocument.class)
-                .singleOrDefault(null)
-                .subscribe(new Action1<VertxJsonDocument>() {
-                    @Override
-                    public void call(VertxJsonDocument vertxJsonDocument) {
-                        JsonObject rootNode = new JsonObject();
-                        if (vertxJsonDocument == null) {
-                            rootNode.putString("status", "error");
-                            rootNode.putString("reason", "record not found");
-                        }
-                        else{
-                            rootNode.putString("status", "ok");
-                            rootNode.putString("id", vertxJsonDocument.id());
-                            rootNode.putNumber("cas", vertxJsonDocument.cas());
-                            rootNode.putObject("result", vertxJsonDocument.content());
-                        }
+        //translate from vertx jsonObject to couchbase jsonObject
+        com.couchbase.client.java.document.json.JsonObject cbJson =
+                com.couchbase.client.java.document.json.JsonObject.from(content.getMap());
 
-                        vertx.context().runOnContext(ignored -> {
-                            asyncHandler.handle(Future.completedFuture(rootNode));
-                        });
-                    }
-                }, new Action1<Throwable>() {
-                    @Override
-                    public void call(Throwable throwable) {
-                        JsonObject rootNode = new JsonObject();
-                        rootNode.putString("status", "error");
-                        rootNode.putString("reason", throwable.getMessage());
+        JsonDocument doc = JsonDocument.create(docId, expired, cbJson, cas);
 
-                        vertx.context().runOnContext(ignored -> {
-                            asyncHandler.handle(Future.completedFuture(rootNode));
-                        });
-                    }
-                });
+        Observable<JsonDocument> o = upsert ? bucket.upsert(doc) :  bucket.insert(doc);
+        o.flatMap((d) -> bucket.get(docId))
+          .single()
+          .subscribe(jsonDoc -> {
+              JsonObject rootNode = new JsonObject();
+              rootNode.put("status", "ok");
+              rootNode.put("id", jsonDoc.id());
+              rootNode.put("cas", jsonDoc.cas());
+              rootNode.put("result", new JsonObject(jsonDoc.content().toMap()));
+              handleSuccessResult(rootNode, asyncHandler);
+          }, e -> handleFailureResult(e, asyncHandler));
     }
 
-    public void viewQuery(JsonObject command, Handler<AsyncResult<JsonObject>> asyncHandler){
+    public void deleteOne(JsonObject command, Handler<AsyncResult<JsonObject>> asyncHandler) {
+        String doctype = command.getString("doctype");
+        String id = command.getString("id");
+        String docId = buildDocumentId(doctype, id);
+        bucket.remove(docId)
+                .single(null)
+                .subscribe(jsonDoc -> {
+                    JsonObject rootNode = new JsonObject();
+                    rootNode.put("status", "ok");
+                    rootNode.put("id", jsonDoc.id());
+                    rootNode.put("cas", jsonDoc.cas());
+                    rootNode.put("result", new JsonObject(jsonDoc.content().toMap()));
+                    handleSuccessResult(rootNode, asyncHandler);
+                }, e -> handleFailureResult(e, asyncHandler));
+    }
+
+    public void n1ql(JsonObject command, Handler<AsyncResult<JsonObject>> asyncHandler){
+        String currBucketName = command.getString("bucket", bucketName);
+        Query query = Query.simple(command.getString("query"));
+        logger.info(query.toString());
+        bucket.query(query)
+                .flatMap(AsyncQueryResult::rows)
+                //need to pluck result data from {"BucketName": { data }} -> { data }
+                .flatMap(q -> Observable.just(new JsonObject(q.value().getObject(currBucketName).toMap())))
+                .toList()
+                .subscribe(list -> {
+                    JsonObject rootNode = new JsonObject();
+                    rootNode.put("status", "ok");
+                    rootNode.put("total", list.size());
+                    rootNode.put("result", new JsonArray(list));
+                    handleSuccessResult(rootNode, asyncHandler);
+                }, e -> handleFailureResult(e, asyncHandler));
+    }
+
+    protected void createN1qlIndex(Handler<AsyncResult<JsonObject>> asyncHandler){
+        JsonObject command = new JsonObject().put("query", "CREATE PRIMARY INDEX ON " + bucketName);
+        n1ql(command, asyncHandler);
+    }
+
+    public void viewQuery(JsonObject command, Handler<AsyncResult<JsonObject>> asyncHandler) {
         String design = command.getString("design");
         String view = command.getString("view");
-        ViewQuery viewQuery = ViewQuery.from(design, view);
 
+        if(design == null || design.length() == 0 || view == null || view.length() == 0){
+            asyncHandler.handle(Future.failedFuture("design or view can not be null"));
+            return;
+        }
+
+        ViewQuery viewQuery = ViewQuery.from(design, view);
         int skip = command.getInteger("skip", 0);
         int limit = command.getInteger("limit", 0);
-
         if(skip > 0)
             viewQuery.skip(skip);
         if(limit > 0)
@@ -190,154 +217,83 @@ public class CouchbaseServiceImpl implements CouchbaseService {
             viewQuery.group(group);
             viewQuery.groupLevel(groupLeave);
         }
-
         String startKeyDocId = command.getString("startKeyDocId");
         if(startKeyDocId != null){
             viewQuery.startKeyDocId(startKeyDocId);
         }
-
         viewQuery.stale(Stale.FALSE);
-
         String endKeyDocId = command.getString("endKeyDocId");
         if(endKeyDocId != null){
             viewQuery.endKeyDocId(endKeyDocId);
         }
-
-        JsonArray startKey = command.getArray("startKey");
-
+        JsonArray startKey = command.getJsonArray("startKey");
         if(startKey != null){
-            com.couchbase.client.java.document.json.JsonArray startKeyCouchJsonArray = com.couchbase.client.java.document.json.JsonArray.empty();
+            com.couchbase.client.java.document.json.JsonArray startKeyCouchJsonArray =
+                    com.couchbase.client.java.document.json.JsonArray.empty();
             String key;
             for(int i=0; i<startKey.size(); i++){
-                key = startKey.get(i);
+                key = startKey.getString(i);
                 startKeyCouchJsonArray.add(key);
             }
             viewQuery.startKey(startKeyCouchJsonArray);
         }
-
-        JsonArray endKey = command.getArray("endKey");
-
+        JsonArray endKey = command.getJsonArray("endKey");
         if(endKey != null){
             com.couchbase.client.java.document.json.JsonArray endKeyCouchJsonArray = com.couchbase.client.java.document.json.JsonArray.empty();
             String key;
             for(int i=0; i<startKey.size(); i++){
-                key = startKey.get(i);
+                key = startKey.getString(i);
                 endKeyCouchJsonArray.add(key);
             }
             viewQuery.startKey(endKeyCouchJsonArray);
         }
-
-        JsonArray keys = command.getArray("keys");
-
+        JsonArray keys = command.getJsonArray("keys");
         if(keys != null){
             com.couchbase.client.java.document.json.JsonArray couchJsonArray = com.couchbase.client.java.document.json.JsonArray.empty();
             String key;
             for(int i=0; i<keys.size(); i++){
-                key = keys.get(i);
+                key = keys.getString(i);
                 couchJsonArray.add(key);
             }
             viewQuery.keys(couchJsonArray);
         }
 
-        JsonArray results = new JsonArray();
-
-
-        bucket
-            .async()
-            .query(viewQuery)
+        bucket.query(viewQuery)
             .flatMap(AsyncViewResult::rows)
-            .flatMap((doc) -> doc.document(VertxJsonDocument.class))
-            .subscribe(new Action1<VertxJsonDocument>() {
-                @Override
-                public void call(VertxJsonDocument vertxJsonDocument) {
-                    results.add(vertxJsonDocument.content());
-                }
-            }, new Action1<Throwable>() {
-                @Override
-                public void call(Throwable throwable) {
+                .flatMap(row -> row.document())
+                .flatMap(doc -> Observable.just(new JsonObject(doc.content().toMap())))
+                .toList()
+                .subscribe(list -> {
                     JsonObject rootNode = new JsonObject();
-                    rootNode.putString("status", "error");
-                    rootNode.putString("reason", throwable.getMessage());
+                    rootNode.put("status", "ok");
+                    rootNode.put("result", new JsonArray(list));
+                    handleSuccessResult(rootNode, asyncHandler);
+                }, e -> handleFailureResult(e, asyncHandler));
+    }
 
-                    vertx.context().runOnContext(ignored -> {
-                        asyncHandler.handle(Future.completedFuture(rootNode));
-                    });
-
-                }
-            }, new Action0() {
-                @Override
-                public void call() {
+    public void dbInfo(JsonObject command, Handler<AsyncResult<JsonObject>> asyncHandler) {
+        bucket.bucketManager()
+            .flatMap(asyncBucketManager -> asyncBucketManager.info())
+            .subscribe(bucketInfo -> {
                     JsonObject rootNode = new JsonObject();
-                    rootNode.putString("status", "ok");
-                    rootNode.putArray("result", results);
-
-                    vertx.context().runOnContext(ignored -> {
-                        asyncHandler.handle(Future.completedFuture(rootNode));
-                    });
-                }
-            });
-
-        //viewQuery.keys()
-
+                    rootNode.put("status", "ok");
+                    rootNode.put("name", bucketInfo.name());
+                    rootNode.put("bucketType", bucketInfo.type().name());
+                    rootNode.put("nodeCount", bucketInfo.nodeCount());
+                    rootNode.put("replicaCount", bucketInfo.replicaCount());
+                    handleSuccessResult(rootNode, asyncHandler);
+                }, e -> handleFailureResult(e, asyncHandler));
     }
 
-    public void dbInfo(JsonObject command, Handler<AsyncResult<JsonObject>> asyncHandler){
-
-        bucket.async().bucketManager()
-            .flatMap(new Func1<AsyncBucketManager, Observable<BucketInfo>>() {
-                @Override
-                public Observable<BucketInfo> call(AsyncBucketManager asyncBucketManager) {
-                    return asyncBucketManager.info();
-                }
-            })
-            .subscribe(new Action1<BucketInfo>() {
-            @Override
-            public void call(BucketInfo bucketInfo) {
-                JsonObject rootNode = new JsonObject();
-                if (bucketInfo == null) {
-                    rootNode.putString("status", "error");
-                    rootNode.putString("reason", "not_found");
-                } else {
-                    rootNode.putString("status", "ok");
-                    rootNode.putString("name", bucketInfo.name());
-                    rootNode.putString("bucketType", bucketInfo.type().name());
-                    rootNode.putNumber("nodeCount", bucketInfo.nodeCount());
-                    rootNode.putNumber("replicaCount", bucketInfo.replicaCount());
-                }
-                vertx.context().runOnContext(ignored -> {
-                    asyncHandler.handle(Future.completedFuture(rootNode));
-                });
-            }
-        }, new Action1<Throwable>() {
-            @Override
-            public void call(Throwable throwable) {
-                JsonObject rootNode = new JsonObject();
-                rootNode.putString("status", "error");
-                rootNode.putString("reason", throwable.getMessage());
-                vertx.context().runOnContext(ignored -> {
-                    asyncHandler.handle(Future.completedFuture(rootNode));
-                });
-            }
-        });
+    protected void handleSuccessResult(JsonObject result, Handler<AsyncResult<JsonObject>> asyncHandler){
+        vertx.runOnContext(v -> asyncHandler.handle(Future.succeededFuture(result)));
     }
 
-    private <T, U> void asHandler(Observable<T> observable, Handler<AsyncResult<U>> resultHandler, Function<T, U> converter) {
-        Context context = vertx.context();
-
-        observable.subscribe(new Action1<T>() {
-            @Override
-            public void call(T t) {
-                resultHandler.handle(Future.completedFuture(converter.apply(t)));
-            }
-        }, new Action1<Throwable>() {
-            @Override
-            public void call(Throwable throwable) {
-                resultHandler.handle(Future.completedFuture(throwable));
-            }
-        });
+    protected void handleFailureResult(Throwable throwable, Handler<AsyncResult<JsonObject>> asyncHandler){
+        vertx.runOnContext(v -> asyncHandler.handle(Future.failedFuture(throwable)));
     }
 
-    private String buildDocumentId(String doctype, String id){
+    protected String buildDocumentId(String doctype, String id){
         return doctype + ":" + id;
     }
 }

@@ -1,46 +1,39 @@
 package io.vertx.ext.couchbase;
 
-import io.vertx.codegen.annotations.ProxyGen;
-import io.vertx.codegen.annotations.ProxyIgnore;
-import io.vertx.codegen.annotations.VertxGen;
 import io.vertx.core.AsyncResult;
 import io.vertx.core.Handler;
 import io.vertx.core.Vertx;
 import io.vertx.core.json.JsonObject;
 import io.vertx.ext.couchbase.impl.CouchbaseServiceImpl;
-import io.vertx.proxygen.ProxyHelper;
+import io.vertx.ext.couchbase.impl.CouchbaseServiceProxy;
 
-
-import java.util.List;
 
 /**
  * Created by levin on 10/27/2014.
  */
-@VertxGen
-@ProxyGen
 public interface CouchbaseService {
 
     static CouchbaseService create(Vertx vertx, JsonObject config) {
         return new CouchbaseServiceImpl(vertx, config);
     }
 
-    static CouchbaseService createEventBusProxy(Vertx vertx, String address) {
-        return ProxyHelper.createProxy(CouchbaseService.class, vertx, address);
+    static CouchbaseService createProxy(Vertx vertx, JsonObject config) {
+        return new CouchbaseServiceProxy(vertx, config);
     }
 
-    void findOne(JsonObject command, Handler<AsyncResult<JsonObject>> resultHandler);
+    void findOne(JsonObject command, Handler<AsyncResult<JsonObject>> asyncHandler);
 
-    void insert(JsonObject command, Handler<AsyncResult<JsonObject>> resultHandler);
+    void insert(JsonObject command, Handler<AsyncResult<JsonObject>> asyncHandler);
 
-    void delete(JsonObject command, Handler<AsyncResult<JsonObject>> resultHandler);
+    void deleteOne(JsonObject command, Handler<AsyncResult<JsonObject>> asyncHandler);
 
-    void viewQuery(JsonObject command, Handler<AsyncResult<JsonObject>> resultHandler);
+    void viewQuery(JsonObject command, Handler<AsyncResult<JsonObject>> asyncHandler);
 
-    void dbInfo(JsonObject command, Handler<AsyncResult<JsonObject>> resultHandler);
+    void n1ql(JsonObject command, Handler<AsyncResult<JsonObject>> asyncHandler);
 
-    @ProxyIgnore
-    void start();
+    void dbInfo(JsonObject command, Handler<AsyncResult<JsonObject>> asyncHandler);
 
-    @ProxyIgnore
-    void stop();
+    void start(Handler<AsyncResult<Void>> asyncHandler);
+
+    void stop(Handler<AsyncResult<Void>> asyncHandler);
 }

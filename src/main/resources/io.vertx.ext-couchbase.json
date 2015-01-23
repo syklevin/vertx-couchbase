@@ -1,11 +1,15 @@
 {
   "main": "io.vertx.ext.couchbase.CouchbaseServiceVerticle",
   "options": {
-    "worker": false,
+    "worker": true,
     "config": {
       "address": "vertx.couchbase",
-      "connection_string": "mongodb://localhost:27017",
-      "db_name": "default_db"
+      "bucket": "default",
+      "password": "",
+      "queryEnabled": false,
+      "nodes": [
+        "127.0.0.1"
+      ]
     }
   }
 }

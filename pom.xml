@@ -4,70 +4,89 @@
          xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 http://maven.apache.org/xsd/maven-4.0.0.xsd">
   <modelVersion>4.0.0</modelVersion>
 
-  <groupId>io.vertx</groupId>
-  <artifactId>ext-couchbase</artifactId>
-  <version>1.0-SNAPSHOT</version>
-
   <parent>
-    <groupId>org.sonatype.oss</groupId>
-    <artifactId>oss-parent</artifactId>
-    <version>7</version>
+    <groupId>io.vertx</groupId>
+    <artifactId>vertx-ext-parent</artifactId>
+    <version>2</version>
   </parent>
 
+  <artifactId>vertx-couchbase</artifactId>
+  <version>3.0.0-SNAPSHOT</version>
+  <name>Vert.x couchbase Service</name>
+
+  <properties>
+    <stack.version>3.0.0-SNAPSHOT</stack.version>
+  </properties>
+
+  <repositories>
+    <repository>
+      <id>couchbase</id>
+      <name>couchbase repo</name>
+      <url>http://files.couchbase.com/maven2</url>
+      <snapshots><enabled>false</enabled></snapshots>
+    </repository>
+  </repositories>
+
+  <dependencyManagement>
+    <dependencies>
+      <dependency>
+        <groupId>io.vertx</groupId>
+        <artifactId>vertx-dependencies</artifactId>
+        <version>${stack.version}</version>
+        <type>pom</type>
+        <scope>import</scope>
+      </dependency>
+    </dependencies>
+  </dependencyManagement>
+
   <dependencies>
+    <dependency>
+      <groupId>io.vertx</groupId>
+      <artifactId>vertx-core</artifactId>
+    </dependency>
 
     <dependency>
       <groupId>io.vertx</groupId>
       <artifactId>vertx-core</artifactId>
-      <version>3.0.0-SNAPSHOT</version>
     </dependency>
 
     <dependency>
       <groupId>io.vertx</groupId>
-      <artifactId>codegen</artifactId>
-      <version>1.0-SNAPSHOT</version>
+      <artifactId>vertx-codegen</artifactId>
+      <optional>true</optional>
+    </dependency>
+    <dependency>
+      <groupId>io.vertx</groupId>
+      <artifactId>vertx-docgen</artifactId>
       <optional>true</optional>
     </dependency>
 
     <dependency>
-      <groupId>io.vertx</groupId>
-      <artifactId>service-proxy</artifactId>
-      <version>3.0.0-SNAPSHOT</version>
+      <groupId>com.couchbase.client</groupId>
+      <artifactId>java-client</artifactId>
+      <version>2.1.0-dp</version>
     </dependency>
 
+    <!-- test deps -->
     <dependency>
       <groupId>io.vertx</groupId>
-      <artifactId>ext-rx</artifactId>
+      <artifactId>vertx-core</artifactId>
       <version>3.0.0-SNAPSHOT</version>
+      <type>test-jar</type>
+      <scope>test</scope>
     </dependency>
-
-
     <dependency>
-        <groupId>com.couchbase.client</groupId>
-        <artifactId>java-client</artifactId>
-        <version>2.0.0</version>
+      <groupId>io.vertx</groupId>
+      <artifactId>vertx-service-factory</artifactId>
+      <version>3.0.0-SNAPSHOT</version>
+      <scope>test</scope>
     </dependency>
-
-      <!-- test deps -->
-      <dependency>
-          <groupId>io.vertx</groupId>
-          <artifactId>vertx-core</artifactId>
-          <version>3.0.0-SNAPSHOT</version>
-          <type>test-jar</type>
-          <scope>test</scope>
-      </dependency>
-      <dependency>
-          <groupId>io.vertx</groupId>
-          <artifactId>vertx-service-factory</artifactId>
-          <version>3.0.0-SNAPSHOT</version>
-          <scope>test</scope>
-      </dependency>
-      <dependency>
-          <groupId>junit</groupId>
-          <artifactId>junit</artifactId>
-          <scope>test</scope>
-          <version>4.11</version>
-      </dependency>
+    <dependency>
+      <groupId>junit</groupId>
+      <artifactId>junit</artifactId>
+      <scope>test</scope>
+      <version>4.11</version>
+    </dependency>
 
   </dependencies>
 
@@ -75,72 +94,66 @@
 
     <pluginManagement>
       <plugins>
-        <!-- We specify the Maven compiler plugin as we need to set it to Java 1.8 -->
+
+        <!-- Define an assembly execution for packaging the vertx service that can be reused
+             by children modules -->
         <plugin>
-          <artifactId>maven-compiler-plugin</artifactId>
-          <version>3.1</version>
-          <configuration>
-            <source>1.8</source>
-            <target>1.8</target>
-          </configuration>
+          <artifactId>maven-assembly-plugin</artifactId>
+          <version>2.4.1</version>
+          <dependencies>
+            <dependency>
+              <groupId>io.vertx</groupId>
+              <artifactId>vertx-service-factory</artifactId>
+              <version>${project.version}</version>
+            </dependency>
+          </dependencies>
+          <executions>
+            <execution>
+              <id>package-vertx-service</id>
+              <goals>
+                <goal>single</goal>
+              </goals>
+              <configuration>
+                <appendAssemblyId>false</appendAssemblyId>
+                <descriptorRefs>
+                  <descriptorRef>vertx-service</descriptorRef>
+                </descriptorRefs>
+              </configuration>
+              <phase>package</phase>
+            </execution>
+          </executions>
         </plugin>
       </plugins>
     </pluginManagement>
 
     <plugins>
-      <!-- Fat executable jars
-      If you want your project to output a fat executable standalone jar with all the dependencies in it you
-      can use the shade plugin. -->
+      <!-- Copy resources after compilation phase as we generate JS in src/main/resources -->
       <plugin>
-        <groupId>org.apache.maven.plugins</groupId>
-        <artifactId>maven-shade-plugin</artifactId>
-        <version>2.3</version>
+        <artifactId>maven-resources-plugin</artifactId>
         <executions>
           <execution>
-            <phase>package</phase>
-            <goals>
-              <goal>shade</goal>
-            </goals>
-            <configuration>
-              <transformers>
-                <transformer implementation="org.apache.maven.plugins.shade.resource.ManifestResourceTransformer">
-                  <manifestEntries>
-                    <!-- If you want your main verticle to run automatically when you run execute the jar with:
-                    java -jar <jar_name>
-                    Then specify the Main-Class as io.vertx.core.Starter and the Main-Verticle as the verticle
-                    you want to run, as follows:
-                    -->
-                    <Main-Class>io.vertx.core.Starter</Main-Class>
-                    <Main-Verticle>java:io.vertx.example.HelloWorldServer</Main-Verticle>
-
-                    <!-- Alternatively if you just want to run your own main then specify it here as follows:
-                    <Main-Class>your.main.Class</Main-Class>
-                    -->
-                  </manifestEntries>
-                </transformer>
-                <transformer implementation="org.apache.maven.plugins.shade.resource.AppendingTransformer">
-                  <resource>META-INF/services/io.vertx.core.spi.VerticleFactory</resource>
-                </transformer>
-              </transformers>
-              <artifactSet>
-                <!-- By default all the deps go into the fat jar, but we don't need some so we can exclude them
-                here -->
-                <excludes>
-                  <exclude>io.vertx:codegen</exclude>
-                  <exclude>junit:junit</exclude>
-                  <exclude>org.mvel:mvel2</exclude>
-                  <exclude>log4j:log4j</exclude>
-                  <exclude>org.slf4j:slf4j-api</exclude>
-                </excludes>
-              </artifactSet>
-              <outputFile>${project.build.directory}/${artifactId}-${version}-fat.jar</outputFile>
-            </configuration>
+            <id>default-resources</id>
+            <phase>process-classes</phase>
           </execution>
         </executions>
       </plugin>
-
+      <plugin>
+        <groupId>org.apache.maven.plugins</groupId>
+        <artifactId>maven-surefire-plugin</artifactId>
+        <configuration>
+          <failIfNoSpecifiedTests>false</failIfNoSpecifiedTests>
+          <systemPropertyVariables>
+            <vertx.test.timeout>60</vertx.test.timeout>
+            <io.netty.leakDetectionLevel>PARANOID</io.netty.leakDetectionLevel>
+          </systemPropertyVariables>
+          <argLine>-server -Xms128m -Xmx1024m -XX:NewRatio=2</argLine>
+          <excludes>
+            <exclude>**/ScratchPad.java</exclude>
+          </excludes>
+        </configuration>
+      </plugin>
     </plugins>
-
   </build>
+
 
 </project>

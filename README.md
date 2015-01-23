@@ -1,2 +1,2 @@
-# Vert.x 3.0 couchbase module
+# Vert.x 3.0 couchbase service
 
