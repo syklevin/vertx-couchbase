@@ -45,7 +45,7 @@ public class CouchbaseServiceProxy implements CouchbaseService {
 
     @Override
     public void insert(JsonObject command, Handler<AsyncResult<JsonObject>> asyncHandler) {
-        processRequest("findOne", command, asyncHandler);
+        processRequest("insert", command, asyncHandler);
     }
 
     @Override

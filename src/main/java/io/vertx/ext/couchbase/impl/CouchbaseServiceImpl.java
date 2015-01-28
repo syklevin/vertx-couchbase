@@ -19,8 +19,7 @@ import io.vertx.ext.couchbase.CouchbaseService;
 import rx.Observable;
 
 import javax.naming.OperationNotSupportedException;
-import java.util.ArrayList;
-import java.util.List;
+import java.util.*;
 
 /**
  * Created by levin on 10/27/2014.
@@ -136,12 +135,13 @@ public class CouchbaseServiceImpl implements CouchbaseService {
         //final VertxJsonDocument doc = VertxJsonDocument.create(docId, expired, content, cas);
 
         //translate from vertx jsonObject to couchbase jsonObject
-        com.couchbase.client.java.document.json.JsonObject cbJson =
-                com.couchbase.client.java.document.json.JsonObject.from(content.getMap());
+        com.couchbase.client.java.document.json.JsonObject cbJson = toCbJsonObject(content);
+        //com.couchbase.client.java.document.json.JsonObject cbJson =
+        //        com.couchbase.client.java.document.json.JsonObject.from(content.getMap());
 
         JsonDocument doc = JsonDocument.create(docId, expired, cbJson, cas);
-
         Observable<JsonDocument> o = upsert ? bucket.upsert(doc) :  bucket.insert(doc);
+
         o.flatMap((d) -> bucket.get(docId))
           .single()
           .subscribe(jsonDoc -> {
@@ -152,6 +152,35 @@ public class CouchbaseServiceImpl implements CouchbaseService {
               rootNode.put("result", new JsonObject(jsonDoc.content().toMap()));
               handleSuccessResult(rootNode, asyncHandler);
           }, e -> handleFailureResult(e, asyncHandler));
+    }
+    private com.couchbase.client.java.document.json.JsonObject toCbJsonObject(JsonObject content) {
+        com.couchbase.client.java.document.json.JsonObject cbJson = com.couchbase.client.java.document.json.JsonObject.empty();
+
+        Iterator i = content.iterator() ;
+        while( i.hasNext() ) {
+            Map.Entry<String, Object> contentObject = (Map.Entry<String, Object>)i.next() ;
+            cbJson.put(contentObject.getKey(), valueToCbJson(contentObject.getValue()));
+        }
+        return cbJson;
+    }
+
+    private com.couchbase.client.java.document.json.JsonArray toCbJsonArray(JsonArray content) {
+        com.couchbase.client.java.document.json.JsonArray cbJsonArray = com.couchbase.client.java.document.json.JsonArray.empty();
+        Iterator i = content.iterator() ;
+        while( i.hasNext() ) {
+            Object contentObject = i.next() ;
+            cbJsonArray.add(valueToCbJson(contentObject));
+        }
+        return cbJsonArray;
+    }
+
+    private Object valueToCbJson(Object value) {
+        if (value instanceof JsonObject) {
+            return toCbJsonObject((JsonObject)value);
+        } else if (value instanceof JsonArray) {
+            return toCbJsonArray((JsonArray)value);
+        } else
+            return value;
     }
 
     public void deleteOne(JsonObject command, Handler<AsyncResult<JsonObject>> asyncHandler) {
