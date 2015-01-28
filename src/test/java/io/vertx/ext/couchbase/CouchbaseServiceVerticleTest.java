@@ -2,6 +2,7 @@ package io.vertx.ext.couchbase;
 
 import io.vertx.core.DeploymentOptions;
 import io.vertx.core.json.JsonObject;
+import org.junit.Assert;
 import org.junit.Test;
 
 import java.util.concurrent.CountDownLatch;
@@ -14,15 +15,12 @@ public class CouchbaseServiceVerticleTest extends CouchbaseServiceTestBase {
     @Override
     public void setUp() throws Exception {
         super.setUp();
-        String address = "vertx.couchbase";
-        JsonObject config = getConfig();
-        config.put("address", address);
-        DeploymentOptions options = new DeploymentOptions(config);
+
         CountDownLatch latch = new CountDownLatch(1);
-        vertx.deployVerticle("service:io.vertx:ext-couchbase", options, ar -> {
+        vertx.deployVerticle("service:io.vertx:ext-couchbase", ar -> {
             if(ar.succeeded()) {
                 System.out.println("success to deploy couchbase-service");
-                cbService = CouchbaseService.createProxy(vertx, config);
+                cbService = CouchbaseService.createProxy(vertx, "vertx.couchbase");
                 System.out.println("success to create service proxy");
             }
             else{
@@ -32,6 +30,22 @@ public class CouchbaseServiceVerticleTest extends CouchbaseServiceTestBase {
             latch.countDown();
         });
         latch.await();
+    }
+
+    @Test
+    public void testVertxAsync() throws Exception {
+        vertx.runOnContext(ctx -> {
+            try {
+                System.out.println("start wait for 500 millis");
+                Thread.sleep(500);
+                System.out.println("finish wait for 500 millis");
+                Assert.assertTrue(true);
+                testComplete();
+            } catch (Exception ex) {
+            }
+        });
+
+        await();
     }
 
 

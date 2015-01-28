@@ -1,15 +1,8 @@
 package io.vertx.ext.couchbase;
 
 import io.vertx.core.json.JsonObject;
-import io.vertx.ext.couchbase.impl.VertxScheduler;
-import org.junit.Assert;
-import org.junit.Test;
-import rx.Observable;
-import rx.Subscriber;
-
-import java.util.UUID;
 import java.util.concurrent.CountDownLatch;
-import java.util.concurrent.TimeUnit;
+
 
 /**
  * Created by levin on 10/27/2014.

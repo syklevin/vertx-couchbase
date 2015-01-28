@@ -6,7 +6,7 @@
       "address": "vertx.couchbase",
       "bucket": "default",
       "password": "",
-      "queryEnabled": false,
+      "queryEnabled": true,
       "nodes": [
         "127.0.0.1"
       ]

@@ -45,8 +45,8 @@ public class CouchbaseServiceImpl implements CouchbaseService {
         this.vertx = vertx;
         this.config = config;
         this.vertxScheduler = new VertxScheduler(vertx);
-        //this.customTranscoders = new ArrayList<>();
-        //this.customTranscoders.add(new VertxJsonTranscoder());
+        this.customTranscoders = new ArrayList<>();
+        this.customTranscoders.add(new VertxJsonTranscoder());
     }
 
     @Override
@@ -60,7 +60,7 @@ public class CouchbaseServiceImpl implements CouchbaseService {
                 .queryEnabled(queryEnabled)
                 .build();
         couchbase = CouchbaseAsyncCluster.create(env, nodesJsonArr.getList());
-        couchbase.openBucket(bucketName, bucketPwd)
+        couchbase.openBucket(bucketName, bucketPwd, customTranscoders)
                 .subscribe(asyncBucket -> {
                     bucket = asyncBucket;
 
@@ -136,20 +136,20 @@ public class CouchbaseServiceImpl implements CouchbaseService {
         //final VertxJsonDocument doc = VertxJsonDocument.create(docId, expired, content, cas);
 
         //translate from vertx jsonObject to couchbase jsonObject
-        com.couchbase.client.java.document.json.JsonObject cbJson =
-                com.couchbase.client.java.document.json.JsonObject.from(content.getMap());
+//        com.couchbase.client.java.document.json.JsonObject cbJson =
+//                com.couchbase.client.java.document.json.JsonObject.from(content.getMap());
 
-        JsonDocument doc = JsonDocument.create(docId, expired, cbJson, cas);
+        VertxJsonDocument doc = VertxJsonDocument.create(docId, expired, content, cas);
 
-        Observable<JsonDocument> o = upsert ? bucket.upsert(doc) :  bucket.insert(doc);
-        o.flatMap((d) -> bucket.get(docId))
+        Observable<VertxJsonDocument> o = upsert ? bucket.upsert(doc) :  bucket.insert(doc);
+        o.flatMap((d) -> bucket.get(docId, VertxJsonDocument.class))
           .single()
           .subscribe(jsonDoc -> {
               JsonObject rootNode = new JsonObject();
               rootNode.put("status", "ok");
               rootNode.put("id", jsonDoc.id());
               rootNode.put("cas", jsonDoc.cas());
-              rootNode.put("result", new JsonObject(jsonDoc.content().toMap()));
+              rootNode.put("result", jsonDoc.content());
               handleSuccessResult(rootNode, asyncHandler);
           }, e -> handleFailureResult(e, asyncHandler));
     }
@@ -158,14 +158,14 @@ public class CouchbaseServiceImpl implements CouchbaseService {
         String doctype = command.getString("doctype");
         String id = command.getString("id");
         String docId = buildDocumentId(doctype, id);
-        bucket.remove(docId)
+        bucket.remove(docId, VertxJsonDocument.class)
                 .single(null)
                 .subscribe(jsonDoc -> {
                     JsonObject rootNode = new JsonObject();
                     rootNode.put("status", "ok");
                     rootNode.put("id", jsonDoc.id());
                     rootNode.put("cas", jsonDoc.cas());
-                    rootNode.put("result", new JsonObject(jsonDoc.content().toMap()));
+                    rootNode.put("result", jsonDoc.content());
                     handleSuccessResult(rootNode, asyncHandler);
                 }, e -> handleFailureResult(e, asyncHandler));
     }
@@ -195,6 +195,7 @@ public class CouchbaseServiceImpl implements CouchbaseService {
 
     public void viewQuery(JsonObject command, Handler<AsyncResult<JsonObject>> asyncHandler) {
         String design = command.getString("design");
+
         String view = command.getString("view");
 
         if(design == null || design.length() == 0 || view == null || view.length() == 0){
@@ -260,8 +261,8 @@ public class CouchbaseServiceImpl implements CouchbaseService {
 
         bucket.query(viewQuery)
             .flatMap(AsyncViewResult::rows)
-                .flatMap(row -> row.document())
-                .flatMap(doc -> Observable.just(new JsonObject(doc.content().toMap())))
+                .flatMap(row -> row.document(VertxJsonDocument.class))
+                .flatMap(doc -> Observable.just(doc.content()))
                 .toList()
                 .subscribe(list -> {
                     JsonObject rootNode = new JsonObject();

@@ -4,19 +4,10 @@
          xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 http://maven.apache.org/xsd/maven-4.0.0.xsd">
   <modelVersion>4.0.0</modelVersion>
 
-  <parent>
-    <groupId>io.vertx</groupId>
-    <artifactId>vertx-ext-parent</artifactId>
-    <version>2</version>
-  </parent>
-
+  <groupId>io.vertx</groupId>
   <artifactId>vertx-couchbase</artifactId>
-  <version>3.0.0-SNAPSHOT</version>
+  <version>3.0.1-SNAPSHOT</version>
   <name>Vert.x couchbase Service</name>
-
-  <properties>
-    <stack.version>3.0.0-SNAPSHOT</stack.version>
-  </properties>
 
   <repositories>
     <repository>
@@ -27,37 +18,40 @@
     </repository>
   </repositories>
 
-  <dependencyManagement>
-    <dependencies>
-      <dependency>
-        <groupId>io.vertx</groupId>
-        <artifactId>vertx-dependencies</artifactId>
-        <version>${stack.version}</version>
-        <type>pom</type>
-        <scope>import</scope>
-      </dependency>
-    </dependencies>
-  </dependencyManagement>
+  <distributionManagement>
+    <repository>
+      <id>acs.releases.nexus</id>
+      <name>ACS Internal Repository</name>
+      <url>http://repo.acsdev.net/content/repositories/releases</url>
+    </repository>
+    <snapshotRepository>
+      <id>acs.snapshots.nexus</id>
+      <name>ACS Internal Repository</name>
+      <url>http://repo.acsdev.net/content/repositories/snapshots</url>
+    </snapshotRepository>
+  </distributionManagement>
 
   <dependencies>
     <dependency>
       <groupId>io.vertx</groupId>
       <artifactId>vertx-core</artifactId>
+      <version>3.0.0-SNAPSHOT</version>
     </dependency>
-
     <dependency>
       <groupId>io.vertx</groupId>
-      <artifactId>vertx-core</artifactId>
+      <artifactId>vertx-service-proxy</artifactId>
+      <version>3.0.0-SNAPSHOT</version>
     </dependency>
-
     <dependency>
       <groupId>io.vertx</groupId>
       <artifactId>vertx-codegen</artifactId>
+      <version>3.0.0-SNAPSHOT</version>
       <optional>true</optional>
     </dependency>
     <dependency>
       <groupId>io.vertx</groupId>
       <artifactId>vertx-docgen</artifactId>
+      <version>3.0.0-SNAPSHOT</version>
       <optional>true</optional>
     </dependency>
 
@@ -94,7 +88,15 @@
 
     <pluginManagement>
       <plugins>
-
+        <!-- We specify the Maven compiler plugin as we need to set it to Java 1.8 -->
+        <plugin>
+          <artifactId>maven-compiler-plugin</artifactId>
+          <version>3.1</version>
+          <configuration>
+            <source>1.8</source>
+            <target>1.8</target>
+          </configuration>
+        </plugin>
         <!-- Define an assembly execution for packaging the vertx service that can be reused
              by children modules -->
         <plugin>
@@ -127,6 +129,23 @@
     </pluginManagement>
 
     <plugins>
+
+      <plugin>
+        <groupId>org.codehaus.mojo</groupId>
+        <artifactId>build-helper-maven-plugin</artifactId>
+        <executions>
+          <execution>
+            <phase>generate-sources</phase>
+            <goals><goal>add-source</goal></goals>
+            <configuration>
+              <sources>
+                <source>src/main/generated</source>
+              </sources>
+            </configuration>
+          </execution>
+        </executions>
+      </plugin>
+
       <!-- Copy resources after compilation phase as we generate JS in src/main/resources -->
       <plugin>
         <artifactId>maven-resources-plugin</artifactId>

@@ -7,15 +7,14 @@ import io.vertx.core.Handler;
 import io.vertx.core.eventbus.Message;
 import io.vertx.core.eventbus.MessageConsumer;
 import io.vertx.core.json.JsonObject;
+import io.vertx.serviceproxy.ProxyHelper;
 
 /**
  * Created by levin on 1/19/2015.
  */
-public class CouchbaseServiceVerticle extends AbstractVerticle implements Handler<Message<JsonObject>> {
+public class CouchbaseServiceVerticle extends AbstractVerticle {
 
     CouchbaseService service;
-
-    MessageConsumer consumer;
 
     @Override
     public void start(Future<Void> startFuture) throws Exception {
@@ -24,10 +23,12 @@ public class CouchbaseServiceVerticle extends AbstractVerticle implements Handle
         String address = config().getString("address");
         if (address == null) {
             startFuture.fail(new IllegalStateException("address field must be specified in config for service verticle"));
+            return;
         }
 
-        consumer = vertx.eventBus().consumer(address, this);
         service = CouchbaseService.create(vertx, config());
+
+        ProxyHelper.registerService(CouchbaseService.class, vertx, service, address);
 
         // Start it
         service.start(ar -> {
@@ -41,7 +42,6 @@ public class CouchbaseServiceVerticle extends AbstractVerticle implements Handle
 
     @Override
     public void stop(Future<Void> stopFuture) throws Exception {
-        consumer.unregister();
         service.stop(ar -> {
             if (ar.succeeded()) {
                 stopFuture.complete();
@@ -51,50 +51,4 @@ public class CouchbaseServiceVerticle extends AbstractVerticle implements Handle
         });
     }
 
-    @Override
-    public void handle(Message<JsonObject> message) {
-        JsonObject command = message.body();
-        String action = command.getString("action");
-
-        Handler<AsyncResult<JsonObject>> handler = ar -> {
-            if(ar.succeeded()){
-                message.reply(ar.result());
-            }
-            else{
-                JsonObject errorResponse = new JsonObject();
-                errorResponse.put("status", "error");
-                errorResponse.put("message", ar.cause().getMessage());
-                message.reply(errorResponse);
-            }
-        };
-
-        switch(action){
-            case "findOne":
-                service.findOne(command, handler);
-                break;
-            case "deleteOne":
-                service.deleteOne(command, handler);
-                break;
-            case "insert":
-            case "upsert":
-                command.put("upsert", true);
-                service.insert(command, handler);
-                break;
-            case "update":
-                command.put("upsert", false);
-                service.insert(command, handler);
-                break;
-            case "viewQuery":
-                service.viewQuery(command, handler);
-                break;
-            case "n1ql":
-                service.n1ql(command, handler);
-                break;
-            case "dbInfo":
-                service.dbInfo(command, handler);
-                break;
-            default:
-                handler.handle(Future.failedFuture(new Exception("Unkonwn action")));
-        }
-    }
 }
