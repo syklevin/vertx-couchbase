@@ -55,16 +55,13 @@ public class CouchbaseServiceImpl implements CouchbaseService {
     public void start(Handler<AsyncResult<Void>> asyncHandler) {
         address = config.getString("address", DEFAULT_ADDRESS);
         queryEnabled = config.getBoolean("queryEnabled", true);
-        bucketPort = config.getInteger("bucketPort", 11210);
         String bucketPwd = config.getString("password", "");
         bucketName = config.getString("bucket", "default");
         JsonArray nodesJsonArr = config.getJsonArray("nodes", new JsonArray());
         env = DefaultCouchbaseEnvironment.builder()
-                .bootstrapCarrierDirectPort(bucketPort)
                 .queryEnabled(queryEnabled)
                 .build();
 
-        logger.info("PORT SET: " + env.bootstrapCarrierSslPort());
         couchbase = CouchbaseAsyncCluster.create(env, nodesJsonArr.getList());
 
         couchbase.openBucket(bucketName, bucketPwd, customTranscoders)
