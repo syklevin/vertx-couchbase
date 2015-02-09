@@ -31,6 +31,8 @@ public interface CouchbaseService {
 
     void insert(JsonObject command, Handler<AsyncResult<JsonObject>> asyncHandler);
 
+    void update(JsonObject command, Handler<AsyncResult<JsonObject>> asyncHandler);
+
     void deleteOne(JsonObject command, Handler<AsyncResult<JsonObject>> asyncHandler);
 
     void viewQuery(JsonObject command, Handler<AsyncResult<JsonObject>> asyncHandler);
@@ -38,6 +40,7 @@ public interface CouchbaseService {
     void n1ql(JsonObject command, Handler<AsyncResult<JsonObject>> asyncHandler);
 
     void dbInfo(JsonObject command, Handler<AsyncResult<JsonObject>> asyncHandler);
+
 
     @ProxyIgnore
     void start(Handler<AsyncResult<Void>> asyncHandler);

@@ -1,27 +1,27 @@
 package io.vertx.ext.couchbase.impl;
 
 import com.couchbase.client.java.*;
-import com.couchbase.client.java.cluster.BucketSettings;
 import com.couchbase.client.java.document.Document;
 import com.couchbase.client.java.document.JsonDocument;
 import com.couchbase.client.java.env.CouchbaseEnvironment;
 import com.couchbase.client.java.env.DefaultCouchbaseEnvironment;
+import com.couchbase.client.java.error.CASMismatchException;
 import com.couchbase.client.java.query.*;
 import com.couchbase.client.java.transcoder.Transcoder;
 import com.couchbase.client.java.view.*;
-import static com.couchbase.client.java.query.Select.*;
-import static com.couchbase.client.java.query.dsl.Expression.*;
 import io.vertx.core.*;
 import io.vertx.core.json.JsonArray;
 import io.vertx.core.json.JsonObject;
 import io.vertx.core.logging.Logger;
 import io.vertx.core.logging.impl.LoggerFactory;
 import io.vertx.ext.couchbase.CouchbaseService;
+import io.vertx.ext.couchbase.impl.parser.CouchbaseUpdateJsonParser;
 import rx.Observable;
 
-import javax.naming.OperationNotSupportedException;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.NoSuchElementException;
+import java.util.concurrent.TimeUnit;
 
 /**
  * Created by levin on 10/27/2014.
@@ -101,51 +101,32 @@ public class CouchbaseServiceImpl implements CouchbaseService {
 
     @Override
     public void findOne(JsonObject command, Handler<AsyncResult<JsonObject>> asyncHandler) {
+        doFindOne(command)
+            .subscribe(jsonDoc -> {
+                JsonObject rootNode = new JsonObject();
+                rootNode.put("status", "ok");
+                rootNode.put("id", jsonDoc.id());
+                rootNode.put("cas", jsonDoc.cas());
+                rootNode.put("result", new JsonObject(jsonDoc.content().toMap()));
+                handleSuccessResult(rootNode, asyncHandler);
+            }, e -> handleFailureResult(e, asyncHandler));
+    }
+
+    private Observable<JsonDocument> doFindOne(JsonObject command) {
         String doctype = command.getString("doctype");
         String id = command.getString("id");
         if(doctype == null || id == null) {
-            asyncHandler.handle(Future.failedFuture(new Exception("doctype or id could not be null")));
-            return;
+            return Observable.error(new Exception("doctype or id could not be null"));
         }
         final String docId = buildDocumentId(doctype, id);
-        bucket.get(docId)
-                .single()
-                .subscribe(jsonDoc -> {
-                    JsonObject rootNode = new JsonObject();
-                    rootNode.put("status", "ok");
-                    rootNode.put("id", jsonDoc.id());
-                    rootNode.put("cas", jsonDoc.cas());
-                    rootNode.put("result", new JsonObject(jsonDoc.content().toMap()));
-                    handleSuccessResult(rootNode, asyncHandler);
-                }, e -> handleFailureResult(e, asyncHandler));
+        return bucket.get(docId).first();
     }
-
 
     @Override
     public void insert(JsonObject command, Handler<AsyncResult<JsonObject>> asyncHandler) {
-        String doctype = command.getString("doctype");
-        String id = command.getString("id");
-        JsonObject content = command.getJsonObject("content");
-        if (!content.containsKey("_id")) {
-            content.put("_id", id);
-        }
-        if (!content.containsKey("_doctype"))
-            content.put("_doctype", doctype);
-        int expired = command.getInteger("expired", 0);
-        long cas = command.getLong("cas", 0L);
-        boolean upsert = command.getBoolean("upsert", false);
-        final String docId = buildDocumentId(doctype, id);
-        //final VertxJsonDocument doc = VertxJsonDocument.create(docId, expired, content, cas);
-
-        //translate from vertx jsonObject to couchbase jsonObject
-//        com.couchbase.client.java.document.json.JsonObject cbJson =
-//                com.couchbase.client.java.document.json.JsonObject.from(content.getMap());
-
-        VertxJsonDocument doc = VertxJsonDocument.create(docId, expired, content, cas);
-
-        Observable<VertxJsonDocument> o = upsert ? bucket.upsert(doc) :  bucket.insert(doc);
-        o.flatMap((d) -> bucket.get(docId, VertxJsonDocument.class))
-          .single()
+        doInsert(command)
+          .flatMap((d) -> bucket.get(d.id(), VertxJsonDocument.class))
+          .first()
           .subscribe(jsonDoc -> {
               JsonObject rootNode = new JsonObject();
               rootNode.put("status", "ok");
@@ -154,6 +135,65 @@ public class CouchbaseServiceImpl implements CouchbaseService {
               rootNode.put("result", jsonDoc.content());
               handleSuccessResult(rootNode, asyncHandler);
           }, e -> handleFailureResult(e, asyncHandler));
+    }
+
+    private Observable<VertxJsonDocument> doInsert(JsonObject command) {
+        String doctype = command.getString("doctype");
+        String id = command.getString("id");
+        if(doctype == null || id == null) {
+            return Observable.error(new Exception("doctype or id could not be null"));
+        }
+        JsonObject content = command.getJsonObject("content");
+        content.put("_id", content.getString("_id", id));
+        content.put("_doctype", content.getString("_doctype", doctype));
+        int expired = command.getInteger("expired", 0);
+        long cas = command.getLong("cas", 0L);
+        boolean upsert = command.getBoolean("upsert", false);
+        String docId = buildDocumentId(doctype, id);
+
+        VertxJsonDocument doc = VertxJsonDocument.create(docId, expired, content, cas);
+        return upsert ? bucket.upsert(doc) :  bucket.insert(doc);
+    }
+
+    @Override
+    public void update(JsonObject command, Handler<AsyncResult<JsonObject>> asyncHandler) {
+        Boolean upsert = command.getBoolean("upsert", false);
+        JsonArray actions = command.getJsonArray("update", new JsonArray());
+        Observable
+            .defer(() -> doFindOne(command))
+            .onErrorResumeNext(error -> {
+                if (upsert && error instanceof NoSuchElementException) {
+                    return Observable.just(null);
+                } else {
+                    return Observable.error(error);
+                }
+            })
+            .flatMap(doc -> {
+                JsonObject docJson = new JsonObject(doc.content().toMap());
+                JsonObject newContent = CouchbaseUpdateJsonParser.updateJsonObject(docJson, actions);
+                JsonObject newCommand = command.copy();
+                newCommand
+                    .put("upsert", true)
+                    .put("cas", doc == null ? 0L : doc.cas())
+                    .put("content", newContent);
+                return doInsert(newCommand);
+            })
+            .retryWhen(attempts ->
+                    attempts.flatMap(n -> {
+                        if (!(n instanceof CASMismatchException)) {
+                            return Observable.error(n);
+                        }
+                        return Observable.timer(100, TimeUnit.MILLISECONDS);
+                    })
+            )
+            .subscribe(jsonDoc -> {
+                JsonObject rootNode = new JsonObject();
+                rootNode.put("status", "ok");
+                rootNode.put("id", jsonDoc.id());
+                rootNode.put("cas", jsonDoc.cas());
+                rootNode.put("result", jsonDoc.content());
+                handleSuccessResult(rootNode, asyncHandler);
+            }, e -> handleFailureResult(e, asyncHandler));
     }
 
     public void deleteOne(JsonObject command, Handler<AsyncResult<JsonObject>> asyncHandler) {
@@ -231,34 +271,15 @@ public class CouchbaseServiceImpl implements CouchbaseService {
         }
         JsonArray startKey = command.getJsonArray("startKey");
         if(startKey != null){
-            com.couchbase.client.java.document.json.JsonArray startKeyCouchJsonArray =
-                    com.couchbase.client.java.document.json.JsonArray.empty();
-            String key;
-            for(int i=0; i<startKey.size(); i++){
-                key = startKey.getString(i);
-                startKeyCouchJsonArray.add(key);
-            }
-            viewQuery.startKey(startKeyCouchJsonArray);
+            viewQuery.startKey(com.couchbase.client.java.document.json.JsonArray.from(startKey.getList()));
         }
         JsonArray endKey = command.getJsonArray("endKey");
         if(endKey != null){
-            com.couchbase.client.java.document.json.JsonArray endKeyCouchJsonArray = com.couchbase.client.java.document.json.JsonArray.empty();
-            String key;
-            for(int i=0; i<startKey.size(); i++){
-                key = startKey.getString(i);
-                endKeyCouchJsonArray.add(key);
-            }
-            viewQuery.startKey(endKeyCouchJsonArray);
+            viewQuery.startKey(com.couchbase.client.java.document.json.JsonArray.from(endKey.getList()));
         }
         JsonArray keys = command.getJsonArray("keys");
         if(keys != null){
-            com.couchbase.client.java.document.json.JsonArray couchJsonArray = com.couchbase.client.java.document.json.JsonArray.empty();
-            String key;
-            for(int i=0; i<keys.size(); i++){
-                key = keys.getString(i);
-                couchJsonArray.add(key);
-            }
-            viewQuery.keys(couchJsonArray);
+            viewQuery.keys(com.couchbase.client.java.document.json.JsonArray.from(keys.getList()));
         }
 
         bucket.query(viewQuery)

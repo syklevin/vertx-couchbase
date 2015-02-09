@@ -49,6 +49,11 @@ public class CouchbaseServiceProxy implements CouchbaseService {
     }
 
     @Override
+    public void update(JsonObject command, Handler<AsyncResult<JsonObject>> asyncHandler) {
+        processRequest("update", command, asyncHandler);
+    }
+
+    @Override
     public void deleteOne(JsonObject command, Handler<AsyncResult<JsonObject>> asyncHandler) {
         processRequest("deleteOne", command, asyncHandler);
     }
