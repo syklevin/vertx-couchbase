@@ -5,13 +5,17 @@ import com.couchbase.client.java.CouchbaseAsyncCluster;
 import com.couchbase.client.java.document.JsonDocument;
 import com.couchbase.client.java.document.json.JsonObject;
 import com.couchbase.client.java.env.DefaultCouchbaseEnvironment;
+import com.couchbase.client.java.view.AsyncViewResult;
+import com.couchbase.client.java.view.AsyncViewRow;
+import com.couchbase.client.java.view.ViewQuery;
+import com.couchbase.client.java.view.ViewResult;
+import io.vertx.core.AsyncResult;
+import io.vertx.ext.couchbase.impl.VertxJsonDocument;
 import io.vertx.test.core.VertxTestBase;
 import org.junit.Test;
 import rx.Observable;
 
-import java.util.ArrayList;
-import java.util.Date;
-import java.util.UUID;
+import java.util.*;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.TimeUnit;
 
@@ -25,7 +29,7 @@ public class CouchbaseClientTest extends VertxTestBase {
     @Override
     public void setUp() throws Exception {
         CountDownLatch latch = new CountDownLatch(1);
-        String bucket = "default";
+        String bucket = "helios-test";
         DefaultCouchbaseEnvironment env = DefaultCouchbaseEnvironment.builder().build();
         CouchbaseAsyncCluster couchbaseAsyncCluster = CouchbaseAsyncCluster.create(env, new String[] { "192.168.0.87" });
         couchbaseAsyncCluster.openBucket(bucket, "")
@@ -92,6 +96,28 @@ public class CouchbaseClientTest extends VertxTestBase {
         asyncBucket
             .get("injofejwfioj3")
             .first()
+            .subscribe(x -> {
+                latch.countDown();
+            }, System.err::println);
+        latch.await();
+    }
+
+    @Test
+    public void testViewQueryCount() throws InterruptedException {
+        CountDownLatch latch = new CountDownLatch(1);
+        ViewQuery viewQuery = ViewQuery.from("dev_test", "test_group");
+        viewQuery.reduce(true);
+        viewQuery.group(true);
+        asyncBucket
+            .query(viewQuery)
+            .flatMap(AsyncViewResult::rows)
+            .flatMap(x -> {
+                Map<Object, Object> keyValue = new HashMap<>();
+                keyValue.put("key", x.key());
+                keyValue.put("value", x.value());
+                return Observable.just(keyValue);
+            })
+            .toList()
             .subscribe(x -> {
                 latch.countDown();
             }, System.err::println);

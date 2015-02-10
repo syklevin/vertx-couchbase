@@ -144,16 +144,73 @@ public class CouchbaseServiceTestBase extends VertxTestBase {
 
     }
 
+
+    public JsonObject genTest() {
+        String[] types = new String[] { "IT", "fashion", "boss", "manager" };
+        return new JsonObject()
+            .put("doctype", "test")
+            .put("id", UUID.randomUUID().toString())
+            .put("content", new JsonObject()
+                    .put("type", types[(int)(Math.random() * types.length)])
+                    .put("money", (int)(Math.random() * 1000))
+            );
+    }
+
+    @Test
+    public void genFixture() throws InterruptedException {
+        CountDownLatch latch = new CountDownLatch(100);
+        for (int i = 0; i < 100; ++i) {
+            cbService.insert(genTest(), ar -> {
+                latch.countDown();
+                if (latch.getCount() == 0) {
+                    testComplete();
+                }
+            });
+        }
+        latch.await();
+    }
+
+
     @Test
     public void testViewQuery() {
         JsonObject command = new JsonObject()
-            .put("design", "dev_default")
-            .put("view", "by_name");
+            .put("design", "dev_test")
+            .put("view", "test_by_id");
         cbService.viewQuery(command, ar -> {
             JsonObject result = checkFine(ar);
+            assertTrue(result.getJsonArray("result").size() > 0);
             testComplete();
         });
 
+        await();
+    }
+
+    @Test
+    public void testViewQueryCount() {
+        JsonObject viewquery = new JsonObject()
+            .put("design", "dev_test")
+            .put("view", "test_count")
+            .put("reduce", true);
+        cbService.viewQuery(viewquery, ar -> {
+            JsonObject result = checkFine(ar);
+            assertTrue(result.getJsonArray("result").getJsonObject(0).getInteger("value") > 0);
+            testComplete();
+        });
+        await();
+    }
+
+    @Test
+    public void testViewQueryGroupCount() {
+        JsonObject viewquery = new JsonObject()
+            .put("design", "dev_test")
+            .put("view", "test_group")
+            .put("group", true)
+            .put("reduce", true);
+        cbService.viewQuery(viewquery, ar -> {
+            JsonObject result = checkFine(ar);
+            assertTrue(result.getJsonArray("result").size() > 1);
+            testComplete();
+        });
         await();
     }
 
@@ -205,7 +262,5 @@ public class CouchbaseServiceTestBase extends VertxTestBase {
         checkStatus(result);
         return result;
     }
-
-
 
 }

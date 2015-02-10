@@ -254,12 +254,18 @@ public class CouchbaseServiceImpl implements CouchbaseService {
             viewQuery.limit(limit);
 
         boolean group = command.getBoolean("group", false);
-        int groupLeave = command.getInteger("groupLeave", 0);
+        int groupLevel = command.getInteger("groupLevel", 0);
 
         if(group){
             viewQuery.group(group);
-            viewQuery.groupLevel(groupLeave);
+            viewQuery.groupLevel(groupLevel);
         }
+
+        boolean descending = command.getBoolean("descending", false);
+        if(descending) {
+            viewQuery.descending(descending);
+        }
+
         String startKeyDocId = command.getString("startKeyDocId");
         if(startKeyDocId != null){
             viewQuery.startKeyDocId(startKeyDocId);
@@ -277,36 +283,60 @@ public class CouchbaseServiceImpl implements CouchbaseService {
         if(endKey != null){
             viewQuery.startKey(com.couchbase.client.java.document.json.JsonArray.from(endKey.getList()));
         }
+        JsonArray key = command.getJsonArray("key");
+        if(key != null){
+            viewQuery.key(com.couchbase.client.java.document.json.JsonArray.from(key.getList()));
+        }
         JsonArray keys = command.getJsonArray("keys");
         if(keys != null){
             viewQuery.keys(com.couchbase.client.java.document.json.JsonArray.from(keys.getList()));
         }
+        Boolean reduce = command.getBoolean("reduce", false);
+        if (reduce) {
+            viewQuery.reduce(reduce);
+        }
 
-        bucket.query(viewQuery)
-            .flatMap(AsyncViewResult::rows)
+        Observable<AsyncViewRow> asyncViewRowObservable = bucket.query(viewQuery).flatMap(AsyncViewResult::rows);
+        Observable<JsonObject> docObservable;
+
+        if (reduce) {
+            docObservable = asyncViewRowObservable
+                .flatMap(row -> {
+                    // NOTE: Assume reduce do not produce id in row record
+                    // only key value in row
+                    JsonObject rowJson = new JsonObject()
+                        .put("key", row.key())
+                        .put("value", row.value());
+                    return Observable.just(rowJson);
+                });
+        } else {
+            docObservable = asyncViewRowObservable
                 .flatMap(row -> row.document(VertxJsonDocument.class))
-                .flatMap(doc -> Observable.just(doc.content()))
-                .toList()
-                .subscribe(list -> {
-                    JsonObject rootNode = new JsonObject();
-                    rootNode.put("status", "ok");
-                    rootNode.put("result", new JsonArray(list));
-                    handleSuccessResult(rootNode, asyncHandler);
-                }, e -> handleFailureResult(e, asyncHandler));
+                .flatMap(doc -> Observable.just(doc.content()));
+        }
+
+        docObservable
+            .toList()
+            .subscribe(list -> {
+                JsonObject rootNode = new JsonObject();
+                rootNode.put("status", "ok");
+                rootNode.put("result", new JsonArray(list));
+                handleSuccessResult(rootNode, asyncHandler);
+            }, e -> handleFailureResult(e, asyncHandler));
     }
 
     public void dbInfo(JsonObject command, Handler<AsyncResult<JsonObject>> asyncHandler) {
         bucket.bucketManager()
             .flatMap(asyncBucketManager -> asyncBucketManager.info())
             .subscribe(bucketInfo -> {
-                    JsonObject rootNode = new JsonObject();
-                    rootNode.put("status", "ok");
-                    rootNode.put("name", bucketInfo.name());
-                    rootNode.put("bucketType", bucketInfo.type().name());
-                    rootNode.put("nodeCount", bucketInfo.nodeCount());
-                    rootNode.put("replicaCount", bucketInfo.replicaCount());
-                    handleSuccessResult(rootNode, asyncHandler);
-                }, e -> handleFailureResult(e, asyncHandler));
+                JsonObject rootNode = new JsonObject();
+                rootNode.put("status", "ok");
+                rootNode.put("name", bucketInfo.name());
+                rootNode.put("bucketType", bucketInfo.type().name());
+                rootNode.put("nodeCount", bucketInfo.nodeCount());
+                rootNode.put("replicaCount", bucketInfo.replicaCount());
+                handleSuccessResult(rootNode, asyncHandler);
+            }, e -> handleFailureResult(e, asyncHandler));
     }
 
     protected void handleSuccessResult(JsonObject result, Handler<AsyncResult<JsonObject>> asyncHandler){
