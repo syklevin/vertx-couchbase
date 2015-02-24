@@ -170,6 +170,24 @@ public class CouchbaseServiceVertxEBProxy implements CouchbaseService {
     });
   }
 
+  public void bulk(JsonObject command, Handler<AsyncResult<JsonObject>> asyncHandler) {
+    if (closed) {
+      asyncHandler.handle(Future.failedFuture(new IllegalStateException("Proxy is closed")));
+      return;
+    }
+    JsonObject _json = new JsonObject();
+    _json.put("command", command);
+    DeliveryOptions _deliveryOptions = new DeliveryOptions();
+    _deliveryOptions.addHeader("action", "bulk");
+    _vertx.eventBus().<JsonObject>send(_address, _json, _deliveryOptions, res -> {
+      if (res.failed()) {
+        asyncHandler.handle(Future.failedFuture(res.cause()));
+      } else {
+        asyncHandler.handle(Future.succeededFuture(res.result().body()));
+      }
+    });
+  }
+
   public void start(Handler<AsyncResult<Void>> asyncHandler) {
   }
 

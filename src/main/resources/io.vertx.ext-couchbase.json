@@ -4,11 +4,11 @@
     "worker": true,
     "config": {
       "address": "vertx.couchbase",
-      "bucket": "default",
+      "bucket": "helios-test",
       "password": "",
-      "queryEnabled": true,
+      "queryEnabled": false,
       "nodes": [
-        "127.0.0.1"
+        "192.168.0.87"
       ]
     }
   }

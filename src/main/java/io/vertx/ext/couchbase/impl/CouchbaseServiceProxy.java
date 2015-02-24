@@ -74,6 +74,11 @@ public class CouchbaseServiceProxy implements CouchbaseService {
     }
 
     @Override
+    public void bulk(JsonObject command, Handler<AsyncResult<JsonObject>> asyncHandler) {
+        processRequest("bulk", command, asyncHandler);
+    }
+
+    @Override
     public void start(Handler<AsyncResult<Void>> asyncHandler) {
         asyncHandler.handle(Future.succeededFuture());
     }

@@ -41,6 +41,7 @@ public interface CouchbaseService {
 
     void dbInfo(JsonObject command, Handler<AsyncResult<JsonObject>> asyncHandler);
 
+    void bulk(JsonObject command, Handler<AsyncResult<JsonObject>> asyncHandler);
 
     @ProxyIgnore
     void start(Handler<AsyncResult<Void>> asyncHandler);

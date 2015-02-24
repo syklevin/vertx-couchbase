@@ -1,51 +1,24 @@
 package io.vertx.ext.couchbase;
 
 
-import io.vertx.core.AsyncResult;
 import io.vertx.core.json.JsonArray;
 import io.vertx.core.json.JsonObject;
-import io.vertx.test.core.VertxTestBase;
 import org.junit.Test;
 
-import java.util.Map;
+import java.io.File;
+import java.util.List;
 import java.util.UUID;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.TimeUnit;
+import java.util.function.BiFunction;
 import java.util.function.Function;
+import java.util.stream.Collectors;
 
 /**
  * Created by levin on 10/27/2014.
  */
-public class CouchbaseServiceTestBase extends VertxTestBase {
+public class CouchbaseServiceTestBase extends CouchbaseServiceVerticleTest {
 
-    protected CouchbaseService cbService;
-
-    @Override
-    public void setUp() throws Exception {
-        super.setUp();
-
-        CountDownLatch latch = new CountDownLatch(1);
-        vertx.deployVerticle("service:io.vertx:ext-couchbase", ar -> {
-            if (ar.succeeded()) {
-                System.out.println("success to deploy couchbase-service");
-                cbService = CouchbaseService.createProxy(vertx, "vertx.couchbase");
-                System.out.println("success to create service proxy");
-            } else {
-                System.out.println("failed to deploy couchbase-service");
-                System.out.println(ar.cause().getMessage());
-            }
-            latch.countDown();
-        });
-        latch.await();
-    }
-
-    protected JsonObject getConfig() {
-        JsonObject couchbaseCfg = new JsonObject()
-            .put("bucket", "default")
-            .put("password", "")
-            .put("nodes", new JsonArray().add("127.0.0.1"));
-        return couchbaseCfg;
-    }
 
     @Test
     public void testDbInfo() throws Exception {
@@ -145,7 +118,7 @@ public class CouchbaseServiceTestBase extends VertxTestBase {
     }
 
 
-    public JsonObject genTest() {
+    public JsonObject genFixture() {
         String[] types = new String[] { "IT", "fashion", "boss", "manager" };
         return new JsonObject()
             .put("doctype", "test")
@@ -157,10 +130,10 @@ public class CouchbaseServiceTestBase extends VertxTestBase {
     }
 
     @Test
-    public void genFixture() throws InterruptedException {
+    public void genFixtures() throws InterruptedException {
         CountDownLatch latch = new CountDownLatch(100);
         for (int i = 0; i < 100; ++i) {
-            cbService.insert(genTest(), ar -> {
+            cbService.insert(genFixture(), ar -> {
                 latch.countDown();
                 if (latch.getCount() == 0) {
                     testComplete();
@@ -215,6 +188,31 @@ public class CouchbaseServiceTestBase extends VertxTestBase {
     }
 
     @Test
+    public void testViewQueryKeys() {
+        JsonObject insert = new JsonObject()
+            .put("doctype", "test")
+            .put("id", UUID.randomUUID().toString())
+            .put("content", new JsonObject()
+                .put("test1", "1")
+                .put("test2", "2")
+            );
+        cbService.insert(insert, ar -> {
+            JsonObject viewquery = new JsonObject()
+                .put("design", "dev_test")
+                .put("view", "test_keys")
+                .put("keys", new JsonArray()
+                    .add(new JsonArray().add("1").add("2"))
+                );
+            cbService.viewQuery(viewquery, ar2 -> {
+                JsonObject result = checkFine(ar);
+                assertTrue(result.getJsonArray("result").size() > 1);
+                testComplete();
+            });
+        });
+        await();
+    }
+
+    @Test
     public void testUpdate() {
         String id = UUID.randomUUID().toString();
         String doctype = "user";
@@ -245,22 +243,35 @@ public class CouchbaseServiceTestBase extends VertxTestBase {
         await(30, TimeUnit.SECONDS);
     }
 
+    @Test
+    public void testBulk() {
+        String doctype = "test";
 
-    private void checkOk(AsyncResult<JsonObject> result) {
-        if (!result.succeeded())
-            fail(result.cause().getMessage());
-    }
+        String id1 = UUID.randomUUID().toString();
+        JsonObject insert1 =  new JsonObject()
+            .put("_actionName", "insert")
+            .put("doctype", doctype)
+            .put("id", id1);
 
-    private void checkStatus(JsonObject result) {
-        if (!"ok".equals(result.getString("status")))
-            fail(result.getString("status"));
-    }
+        String id2 = UUID.randomUUID().toString();
+        JsonObject insert2 =  new JsonObject()
+            .put("_actionName", "insert")
+            .put("doctype", doctype)
+            .put("id", id2);
 
-    private JsonObject checkFine(AsyncResult<JsonObject> ar) {
-        checkOk(ar);
-        JsonObject result = ar.result();
-        checkStatus(result);
-        return result;
+        JsonObject command = new JsonObject()
+            .put("actions", new JsonArray()
+                .add(insert1)
+                .add(insert2)
+            );
+
+        cbService.bulk(command, ar -> {
+            JsonObject object = checkFine(ar);
+            JsonArray results = object.getJsonArray("results");
+            assertEquals(doctype + ":" + id1, results.getJsonObject(0).getString("id"));
+            assertEquals(doctype + ":" + id2, results.getJsonObject(1).getString("id"));
+        });
+
     }
 
 }

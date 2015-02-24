@@ -87,6 +87,10 @@ public class CouchbaseServiceVertxProxyHandler extends ProxyHandler {
         service.dbInfo((io.vertx.core.json.JsonObject)json.getValue("command"), createHandler(msg));
         break;
       }
+      case "bulk": {
+        service.bulk((io.vertx.core.json.JsonObject)json.getValue("command"), createHandler(msg));
+        break;
+      }
       case "start": {
         service.start(createHandler(msg));
         break;
