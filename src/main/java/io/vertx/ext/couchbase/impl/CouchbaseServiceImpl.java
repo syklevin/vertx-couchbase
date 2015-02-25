@@ -274,23 +274,17 @@ public class CouchbaseServiceImpl implements CouchbaseService {
         ViewQuery viewQuery = ViewQuery.from(design, view);
         int skip = command.getInteger("skip", 0);
         int limit = command.getInteger("limit", 0);
-        if (skip > 0)
-            viewQuery.skip(skip);
-        if (limit > 0)
-            viewQuery.limit(limit);
+        if (skip > 0) viewQuery.skip(skip);
+        if (limit > 0) viewQuery.limit(limit);
 
         boolean group = command.getBoolean("group", false);
-        int groupLevel = command.getInteger("groupLevel", 1);
+        int groupLevel = command.getInteger("groupLevel", 0);
 
-        if (group) {
-            viewQuery.group(group);
-            viewQuery.groupLevel(groupLevel);
-        }
+        if (group) viewQuery.group(group);
+        if (groupLevel > 0) viewQuery.groupLevel(groupLevel);
 
         boolean descending = command.getBoolean("descending", false);
-        if (descending) {
-            viewQuery.descending(descending);
-        }
+        if (descending) viewQuery.descending(descending);
 
         String startKeyDocId = command.getString("startKeyDocId");
         if (startKeyDocId != null) {
