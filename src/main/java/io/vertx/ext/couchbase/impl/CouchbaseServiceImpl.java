@@ -111,7 +111,6 @@ public class CouchbaseServiceImpl implements CouchbaseService {
     @Override
     public void findOne(JsonObject command, Handler<AsyncResult<JsonObject>> asyncHandler) {
         doFindOne(command)
-            .first()
             .subscribe(jsonDoc -> {
                 JsonObject rootNode = new JsonObject();
                 rootNode.put("status", "ok");
@@ -129,7 +128,7 @@ public class CouchbaseServiceImpl implements CouchbaseService {
             return Observable.error(new Exception("doctype or id could not be null"));
         }
         final String docId = buildDocumentId(doctype, id);
-        return bucket.get(docId, VertxJsonDocument.class);
+        return bucket.get(docId, VertxJsonDocument.class).first();
     }
 
     @Override

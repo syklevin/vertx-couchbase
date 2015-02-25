@@ -7,6 +7,7 @@ import org.junit.Test;
 
 import java.io.File;
 import java.util.List;
+import java.util.NoSuchElementException;
 import java.util.UUID;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.TimeUnit;
@@ -241,6 +242,29 @@ public class CouchbaseServiceTestBase extends CouchbaseServiceVerticleTest {
         });
 
         await(30, TimeUnit.SECONDS);
+    }
+
+    @Test
+    public void testUpdateNoSuchElement() {
+        String id = UUID.randomUUID().toString();
+        String doctype = "test";
+        JsonObject command = new JsonObject()
+            .put("id", id)
+            .put("doctype", doctype)
+            .put("update", new JsonObject()
+                .put("$set", new JsonObject()
+                    .put("name", "x")
+                )
+            );
+        cbService.update(command, ar -> {
+            if (ar.failed()) {
+                assertTrue(ar.cause() instanceof Exception);
+                testComplete();
+            } else {
+                fail("should fail");
+            }
+        });
+        await();
     }
 
     @Test
