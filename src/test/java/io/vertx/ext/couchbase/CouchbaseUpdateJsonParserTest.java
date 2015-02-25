@@ -88,4 +88,11 @@ public class CouchbaseUpdateJsonParserTest extends VertxTestBase {
         assertEquals("b", b.getJsonArray("b").getString(1));
     }
 
+    @Test
+    public void testJsonArray() {
+        JsonArray a = new JsonArray().add(new JsonObject());
+        JsonObject b = new JsonObject().put("result", a);
+        com.couchbase.client.java.document.json.JsonObject.from(b.getMap());
+    }
+
 }

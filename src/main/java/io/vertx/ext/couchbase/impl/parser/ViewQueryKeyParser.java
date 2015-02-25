@@ -1,7 +1,5 @@
 package io.vertx.ext.couchbase.impl.parser;
 
-import com.couchbase.client.java.document.json.JsonArray;
-import com.couchbase.client.java.document.json.JsonObject;
 import com.couchbase.client.java.view.ViewQuery;
 
 /**
@@ -15,7 +13,7 @@ public class ViewQueryKeyParser {
         }
     }
 
-    public static void parseKey(ViewQuery viewQuery, Object object) throws ViewQueryKeyParserException {
+    public static void parseKey(ViewQuery viewQuery, Object object) throws Exception {
         if (object instanceof String) {
             viewQuery.key((String) object);
         } else if (object instanceof Long) {
@@ -27,51 +25,52 @@ public class ViewQueryKeyParser {
         } else if (object instanceof Boolean) {
             viewQuery.key((Boolean)object);
         } else if (object instanceof io.vertx.core.json.JsonObject) {
-            viewQuery.key(JsonObject.from(((io.vertx.core.json.JsonObject)object).getMap()));
+            viewQuery.key(CouchbaseVertxJsonConverter.convertCouchbaseJsonObject((io.vertx.core.json.JsonObject) object));
         } else if (object instanceof io.vertx.core.json.JsonArray) {
-            viewQuery.key(JsonArray.from(((io.vertx.core.json.JsonArray) object).getList()));
+            viewQuery.key(CouchbaseVertxJsonConverter.convertCouchbaseJsonArray((io.vertx.core.json.JsonArray) object));
         } else {
             throw new ViewQueryKeyParserException("key");
         }
     }
 
-    public static void parseEndKey(ViewQuery viewQuery, Object object) throws ViewQueryKeyParserException {
+    public static void parseEndKey(ViewQuery viewQuery, Object object) throws Exception {
         if (object instanceof String) {
-            viewQuery.key((String) object);
+            viewQuery.endKey((String) object);
         } else if (object instanceof Long) {
-            viewQuery.key((Long)object);
+            viewQuery.endKey((Long) object);
         } else if (object instanceof Integer) {
-            viewQuery.key((Integer)object);
+            viewQuery.endKey((Integer) object);
         } else if (object instanceof Double) {
-            viewQuery.key((Double)object);
+            viewQuery.endKey((Double) object);
         } else if (object instanceof Boolean) {
-            viewQuery.key((Boolean)object);
+            viewQuery.endKey((Boolean) object);
         } else if (object instanceof io.vertx.core.json.JsonObject) {
-            viewQuery.key(JsonObject.from(((io.vertx.core.json.JsonObject)object).getMap()));
+            viewQuery.endKey(CouchbaseVertxJsonConverter.convertCouchbaseJsonObject((io.vertx.core.json.JsonObject) object));
         } else if (object instanceof io.vertx.core.json.JsonArray) {
-            viewQuery.key(JsonArray.from(((io.vertx.core.json.JsonArray) object).getList()));
+            viewQuery.endKey(CouchbaseVertxJsonConverter.convertCouchbaseJsonArray((io.vertx.core.json.JsonArray) object));
         } else {
             throw new ViewQueryKeyParserException("endKey");
         }
     }
 
-    public static void parseStartKey(ViewQuery viewQuery, Object object) throws ViewQueryKeyParserException {
+    public static void parseStartKey(ViewQuery viewQuery, Object object) throws Exception {
         if (object instanceof String) {
-            viewQuery.key((String) object);
+            viewQuery.startKey((String) object);
         } else if (object instanceof Long) {
-            viewQuery.key((Long)object);
+            viewQuery.startKey((Long) object);
         } else if (object instanceof Integer) {
-            viewQuery.key((Integer)object);
+            viewQuery.startKey((Integer) object);
         } else if (object instanceof Double) {
-            viewQuery.key((Double)object);
+            viewQuery.startKey((Double) object);
         } else if (object instanceof Boolean) {
-            viewQuery.key((Boolean)object);
+            viewQuery.startKey((Boolean) object);
         } else if (object instanceof io.vertx.core.json.JsonObject) {
-            viewQuery.key(JsonObject.from(((io.vertx.core.json.JsonObject)object).getMap()));
+            viewQuery.startKey(CouchbaseVertxJsonConverter.convertCouchbaseJsonObject((io.vertx.core.json.JsonObject) object));
         } else if (object instanceof io.vertx.core.json.JsonArray) {
-            viewQuery.key(JsonArray.from(((io.vertx.core.json.JsonArray) object).getList()));
+            viewQuery.startKey(CouchbaseVertxJsonConverter.convertCouchbaseJsonArray((io.vertx.core.json.JsonArray) object));
         } else {
             throw new ViewQueryKeyParserException("startKey");
         }
     }
+
 }

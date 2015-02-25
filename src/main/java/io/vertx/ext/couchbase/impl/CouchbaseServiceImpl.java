@@ -299,7 +299,7 @@ public class CouchbaseServiceImpl implements CouchbaseService {
         if (startKey != null) {
             try {
                 ViewQueryKeyParser.parseStartKey(viewQuery, startKey);
-            } catch (ViewQueryKeyParser.ViewQueryKeyParserException e) {
+            } catch (Exception e) {
                 return Observable.error(e);
             }
         }
@@ -307,7 +307,7 @@ public class CouchbaseServiceImpl implements CouchbaseService {
         if (endKey != null) {
             try {
                 ViewQueryKeyParser.parseEndKey(viewQuery, endKey);
-            } catch (ViewQueryKeyParser.ViewQueryKeyParserException e) {
+            } catch (Exception e) {
                 return Observable.error(e);
             }
         }
@@ -315,7 +315,7 @@ public class CouchbaseServiceImpl implements CouchbaseService {
         if (key != null) {
             try {
                 ViewQueryKeyParser.parseKey(viewQuery, key);
-            } catch (ViewQueryKeyParser.ViewQueryKeyParserException e) {
+            } catch (Exception e) {
                 return Observable.error(e);
             }
         }
