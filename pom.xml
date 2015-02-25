@@ -6,7 +6,7 @@
 
   <groupId>io.vertx</groupId>
   <artifactId>vertx-couchbase</artifactId>
-  <version>3.0.4-SNAPSHOT</version>
+  <version>3.0.5-SNAPSHOT</version>
   <name>Vert.x couchbase Service</name>
 
   <repositories>
