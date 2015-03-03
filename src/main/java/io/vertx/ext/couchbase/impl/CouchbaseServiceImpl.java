@@ -170,6 +170,8 @@ public class CouchbaseServiceImpl implements CouchbaseService {
         if (update == null || update.size() == 0) {
             return Observable.error(new Exception("invalid update content"));
         }
+        int maxTries = command.getInteger("maxTries", 10);
+        final int[] tries = {0};
         return Observable
             .defer(() -> doFindOne(command))
             .onErrorResumeNext(error -> {
@@ -195,6 +197,9 @@ public class CouchbaseServiceImpl implements CouchbaseService {
             .retryWhen(attempts ->
                     attempts.flatMap(n -> {
                         if (!(n instanceof CASMismatchException)) {
+                            return Observable.error(n);
+                        }
+                        if (++tries[0] > maxTries) {
                             return Observable.error(n);
                         }
                         return Observable.timer(100, TimeUnit.MILLISECONDS);
