@@ -38,26 +38,30 @@ public class CouchbaseServiceTestBase extends CouchbaseServiceVerticleTest {
 
     @Test
     public void testFindOne() throws Exception {
+        
+        String id = UUID.randomUUID().toString();
 
         JsonObject command = new JsonObject();
         command.put("doctype", "user");
-        command.put("id", "0ce06b76-856f-48a9-8669-d9b8a3f5ff2c");
+        command.put("id", id).put("content", new JsonObject().put("1", "2"));
 
-        cbService
-            .findOne(command, ar -> {
-                if (ar.succeeded()) {
-                    JsonObject result = ar.result();
-                    if ("ok".equals(result.getString("status"))) {
-                        JsonObject dbUser = result.getJsonObject("result");
-                        assertEquals(dbUser.getString("username"), "xyz");
-                        testComplete();
+        cbService.insert(command, i -> {
+            cbService
+                .findOne(command, ar -> {
+                    if (ar.succeeded()) {
+                        JsonObject result = ar.result();
+                        if ("ok".equals(result.getString("status"))) {
+                            JsonObject dbUser = result.getJsonObject("result");
+                            assertEquals(dbUser.getString("1"), "2");
+                            testComplete();
+                        } else {
+                            fail(result.getString("status"));
+                        }
                     } else {
-                        fail(result.getString("status"));
+                        fail(ar.cause().getMessage());
                     }
-                } else {
-                    fail(ar.cause().getMessage());
-                }
-            });
+                });
+        });
         await();
     }
 

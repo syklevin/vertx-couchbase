@@ -294,7 +294,8 @@ public class CouchbaseServiceImpl implements CouchbaseService {
         if (startKeyDocId != null) {
             viewQuery.startKeyDocId(startKeyDocId);
         }
-        viewQuery.stale(Stale.FALSE);
+        
+        viewQuery.stale(Stale.TRUE);
         String endKeyDocId = command.getString("endKeyDocId");
         if (endKeyDocId != null) {
             viewQuery.endKeyDocId(endKeyDocId);
