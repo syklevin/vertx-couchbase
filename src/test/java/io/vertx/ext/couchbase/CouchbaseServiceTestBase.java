@@ -3,6 +3,7 @@ package io.vertx.ext.couchbase;
 
 import io.vertx.core.json.JsonArray;
 import io.vertx.core.json.JsonObject;
+import io.vertx.ext.couchbase.impl.Stale;
 import org.junit.Test;
 
 import java.io.File;
@@ -213,6 +214,19 @@ public class CouchbaseServiceTestBase extends CouchbaseServiceVerticleTest {
                 assertTrue(result.getJsonArray("result").size() > 1);
                 testComplete();
             });
+        });
+        await();
+    }
+    
+    @Test
+    public void testViewQueryStale() {
+        // dont know how to test it...inspect var only
+        JsonObject command = new JsonObject()
+            .put("design", "dev_test")
+            .put("view", "test_keys")
+            .put("stale", Stale.FALSE.identifier());
+        cbService.viewQuery(command, ar -> {
+            testComplete();
         });
         await();
     }

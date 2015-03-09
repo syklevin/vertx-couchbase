@@ -295,7 +295,9 @@ public class CouchbaseServiceImpl implements CouchbaseService {
             viewQuery.startKeyDocId(startKeyDocId);
         }
         
-        viewQuery.stale(Stale.FALSE);
+        String stale = command.getString("stale", io.vertx.ext.couchbase.impl.Stale.FALSE.identifier());
+        viewQuery.stale(io.vertx.ext.couchbase.impl.Stale.toStale(stale));
+        
         String endKeyDocId = command.getString("endKeyDocId");
         if (endKeyDocId != null) {
             viewQuery.endKeyDocId(endKeyDocId);
