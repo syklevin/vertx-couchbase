@@ -43,7 +43,7 @@ public class CouchbaseServiceTestBase extends CouchbaseServiceVerticleTest {
         String id = UUID.randomUUID().toString();
 
         JsonObject command = new JsonObject();
-        command.put("doctype", "user");
+        command.put("doctype", "player");
         command.put("id", id).put("content", new JsonObject().put("1", "2"));
 
         cbService.insert(command, i -> {

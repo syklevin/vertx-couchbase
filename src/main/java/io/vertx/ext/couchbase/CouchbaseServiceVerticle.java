@@ -3,12 +3,14 @@ package io.vertx.ext.couchbase;
 import io.vertx.core.AbstractVerticle;
 import io.vertx.core.Future;
 import io.vertx.serviceproxy.ProxyHelper;
+import org.apache.logging.log4j.LogManager;
+import org.apache.logging.log4j.Logger;
 
 /**
  * Created by levin on 1/19/2015.
  */
 public class CouchbaseServiceVerticle extends AbstractVerticle {
-
+    public static final Logger logger = LogManager.getLogger(CouchbaseServiceVerticle.class);
     CouchbaseService service;
 
     @Override

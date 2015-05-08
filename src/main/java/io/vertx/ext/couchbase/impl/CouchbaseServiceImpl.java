@@ -4,6 +4,7 @@ import com.couchbase.client.java.AsyncBucket;
 import com.couchbase.client.java.AsyncCluster;
 import com.couchbase.client.java.CouchbaseAsyncCluster;
 import com.couchbase.client.java.document.Document;
+import com.couchbase.client.java.document.JsonDocument;
 import com.couchbase.client.java.env.CouchbaseEnvironment;
 import com.couchbase.client.java.env.DefaultCouchbaseEnvironment;
 import com.couchbase.client.java.error.CASMismatchException;
@@ -20,24 +21,25 @@ import io.vertx.core.Handler;
 import io.vertx.core.Vertx;
 import io.vertx.core.json.JsonArray;
 import io.vertx.core.json.JsonObject;
-import io.vertx.core.logging.Logger;
-import io.vertx.core.logging.impl.LoggerFactory;
+
 import io.vertx.ext.couchbase.CouchbaseService;
 import io.vertx.ext.couchbase.impl.parser.UpdateJsonParser;
 import io.vertx.ext.couchbase.impl.parser.ViewQueryKeyParser;
+import org.apache.logging.log4j.MarkerManager;
 import rx.Observable;
 
 import java.util.ArrayList;
 import java.util.List;
 import java.util.NoSuchElementException;
 import java.util.concurrent.TimeUnit;
-
+import org.apache.logging.log4j.LogManager;
+import org.apache.logging.log4j.Logger;
 /**
  * Created by levin on 10/27/2014.
  */
 public class CouchbaseServiceImpl implements CouchbaseService {
 
-    public static final Logger logger = LoggerFactory.getLogger(CouchbaseServiceImpl.class);
+    public static final Logger logger = LogManager.getLogger(CouchbaseServiceImpl.class);
     public static final String DEFAULT_ADDRESS = "vertx.couchbase";
     private final Vertx vertx;
     private final JsonObject config;
@@ -220,22 +222,19 @@ public class CouchbaseServiceImpl implements CouchbaseService {
             }, e -> handleFailureResult(e, asyncHandler));
     }
 
-    private Observable<VertxJsonDocument> doDeleteOne(JsonObject command) {
+    private Observable<JsonDocument> doDeleteOne(JsonObject command) {
         String doctype = command.getString("doctype");
         String id = command.getString("id");
         String docId = buildDocumentId(doctype, id);
-        return bucket.remove(docId, VertxJsonDocument.class);
+
+        return bucket.remove(docId);
     }
 
     public void deleteOne(JsonObject command, Handler<AsyncResult<JsonObject>> asyncHandler) {
         doDeleteOne(command)
-                .single(null)
                 .subscribe(jsonDoc -> {
                     JsonObject rootNode = new JsonObject();
                     rootNode.put("status", "ok");
-                    rootNode.put("id", jsonDoc.id());
-                    rootNode.put("cas", jsonDoc.cas());
-                    rootNode.put("result", jsonDoc.content());
                     handleSuccessResult(rootNode, asyncHandler);
                 }, e -> handleFailureResult(e, asyncHandler));
     }

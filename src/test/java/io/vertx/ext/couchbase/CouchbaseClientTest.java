@@ -25,10 +25,10 @@ public class CouchbaseClientTest extends VertxTestBase {
     @Override
     public void setUp() throws Exception {
         CountDownLatch latch = new CountDownLatch(1);
-        String bucket = "helios-test";
+        String bucket = "melon-cache";
         DefaultCouchbaseEnvironment env = DefaultCouchbaseEnvironment.builder().build();
-        CouchbaseAsyncCluster couchbaseAsyncCluster = CouchbaseAsyncCluster.create(env, new String[] { "192.168.0.87" });
-        couchbaseAsyncCluster.openBucket(bucket, "")
+        CouchbaseAsyncCluster couchbaseAsyncCluster = CouchbaseAsyncCluster.create(env, new String[] { "192.168.0.137" });
+        couchbaseAsyncCluster.openBucket(bucket, "123123123")
             .subscribe(result -> {
                 asyncBucket = result;
                 latch.countDown();
