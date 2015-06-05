@@ -359,18 +359,21 @@ public class CouchbaseServiceImpl implements CouchbaseService {
         Boolean reduce = command.getBoolean("reduce", false);
         if (reduce) {
             docObservable = asyncViewRowObservable
-                .flatMap(row -> {
+                .concatMap(row -> {
                     // NOTE: no id can't parse to VertxDoc
                     JsonObject rowJson = new JsonObject();
                     Object key = row.key();
                     if (key instanceof com.couchbase.client.java.document.json.JsonArray) {
-                        rowJson.put("key", new JsonArray(key.toString()));
+                        com.couchbase.client.java.document.json.JsonArray cbJsonArray = (com.couchbase.client.java.document.json.JsonArray) key;
+                        rowJson.put("key", new JsonArray(cbJsonArray.toList()));
+                        //rowJson.put("key", new JsonArray(key.toString()));
                     } else {
                         rowJson.put("key", key);
                     }
                     Object value = row.value();
                     if (value instanceof com.couchbase.client.java.document.json.JsonArray) {
-                        rowJson.put("value", new JsonArray(value.toString()));
+                        com.couchbase.client.java.document.json.JsonArray cbJsonArray = (com.couchbase.client.java.document.json.JsonArray) value;
+                        rowJson.put("value", new JsonArray(cbJsonArray.toList()));
                     } else {
                         rowJson.put("value", value);
                     }
@@ -378,8 +381,8 @@ public class CouchbaseServiceImpl implements CouchbaseService {
                 });
         } else {
             docObservable = asyncViewRowObservable
-                .flatMap(row -> row.document(VertxJsonDocument.class))
-                .flatMap(doc -> Observable.just(doc.content()));
+                .concatMap(row -> row.document(VertxJsonDocument.class))
+                .concatMap(doc -> Observable.just(doc.content()));
         }
 
         docObservable
