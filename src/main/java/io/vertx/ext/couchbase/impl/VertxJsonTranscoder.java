@@ -7,7 +7,6 @@ import com.couchbase.client.deps.io.netty.buffer.ByteBuf;
 import com.couchbase.client.deps.io.netty.buffer.Unpooled;
 import com.couchbase.client.deps.io.netty.util.CharsetUtil;
 import com.couchbase.client.java.transcoder.AbstractTranscoder;
-import io.vertx.core.buffer.Buffer;
 import io.vertx.core.json.JsonObject;
 
 /**
